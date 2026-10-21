@@ -14,7 +14,7 @@
   ],
   "type": "module",
   "scripts": {
-    "test": "node --test tests/planner.test.mjs tests/integration.test.mjs tests/features.test.mjs tests/diarystore.test.mjs tests/send-contract.test.mjs"
+    "test": "node --test tests/planner.test.mjs tests/integration.test.mjs tests/features.test.mjs tests/diarystore.test.mjs tests/send-contract.test.mjs tests/runtime-contract.test.mjs"
   },
   "main": "lib/index.js",
   "exports": {

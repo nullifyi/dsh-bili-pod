@@ -33,6 +33,7 @@ const BUCKET = Number(opt.bucket ?? 30)
 const TOP = Number(opt.top ?? 5)
 const GRID = String(opt.grid ?? '3x3')
 const NCOM = Number(opt.comments ?? 8)
+const persistArtifacts = config().artifacts?.enabled === true
 const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
 // ── 防提示注入（2026-10-17 加，Kimi 评审指出：只靠 prompt 层不够）──────────
@@ -73,8 +74,10 @@ const wbi = (params) => {
   return `${q}&w_rid=${crypto.createHash('md5').update(q + mixin).digest('hex')}`
 }
 const shots = dshPath('shots')
-fs.mkdirSync(path.join(shots, 'covers'), { recursive: true })
-fs.mkdirSync(path.join(shots, 'subs'), { recursive: true })
+if (persistArtifacts) {
+  fs.mkdirSync(path.join(shots, 'covers'), { recursive: true })
+  fs.mkdirSync(path.join(shots, 'subs'), { recursive: true })
+}
 
 // ── ① 元信息 ──
 const view = await jget(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`)
@@ -89,9 +92,11 @@ if (d.desc) console.log(`简介: ${d.desc.replace(/\n+/g, ' / ').slice(0, 300)}`
 // ── ② 封面 ──
 const coverFile = path.join(shots, 'covers', `${bvid}.jpg`)
 try {
-  const r = await fetch(d.pic, { headers: { 'user-agent': UA, referer: `https://www.bilibili.com/video/${bvid}/` } })
-  fs.writeFileSync(coverFile, Buffer.from(await r.arrayBuffer()))
-  console.log(`\n══════════ ② 封面 ══════════\n${coverFile}（交给 read_image 看）`)
+  if (persistArtifacts) {
+    const r = await fetch(d.pic, { headers: { 'user-agent': UA, referer: `https://www.bilibili.com/video/${bvid}/` } })
+    fs.writeFileSync(coverFile, Buffer.from(await r.arrayBuffer()))
+    console.log(`\n══════════ ② 封面 ══════════\n${coverFile}（交给 read_image 看）`)
+  } else console.log(`\n封面链接：${d.pic}（artifacts 关闭，不下载）`)
 } catch (e) { console.log(`\n封面下载失败：${e.message}`) }
 
 // ── ③ 官方字幕 ──
@@ -106,8 +111,11 @@ if (subs.length) {
 const subFile = path.join(shots, 'subs', `${bvid}-debrief.txt`)
 console.log('\n══════════ ③ 官方字幕（它到底说了什么）══════════')
 if (body.length) {
-  fs.writeFileSync(subFile, body.map((l) => `[${fmt(l.from)}] ${l.content}`).join('\n'))
-  console.log(`有字幕：${body.length} 行（${fmt(body[0].from)} → ${fmt(body.at(-1).to ?? body.at(-1).from)}）→ ${subFile}`)
+  const subtitleText = body.map((l) => `[${fmt(l.from)}] ${l.content}`).join('\n')
+  if (persistArtifacts) {
+    fs.writeFileSync(subFile, subtitleText)
+    console.log(`有字幕：${body.length} 行（${fmt(body[0].from)} → ${fmt(body.at(-1).to ?? body.at(-1).from)}）→ ${subFile}`)
+  } else console.log('字幕（只读，不写盘）：\n' + subtitleText)
 } else {
   console.log('✗ 无官方字幕轨道 → 这一路缺失，只能靠弹幕 + 热评 + 画面（这正是要六路互补的原因）')
 }
@@ -206,7 +214,7 @@ try {
 } catch (e) { console.log(`（热评拉取失败：${e.message}）`) }
 
 // ── ⑥ 画面抽帧（交给 read_image）──
-if (!opt['no-frames']) {
+if (persistArtifacts && !opt['no-frames']) {
   console.log('\n══════════ ⑥ 画面（长什么样）══════════')
   let sheet = null
   try {
@@ -258,4 +266,4 @@ if (opt.score) {
   console.log('  （填完写进日记：日期 + BV + 分数 + 一句理由）')
 }
 console.log('\n══════════ 下一步（交给模型）══════════')
-console.log('用 read_image 看封面与九宫格，再把上面五路合起来写成结论 —— 脚本只备素材，不作判断。')
+console.log(persistArtifacts ? '用 read_image 看封面与九宫格，再把上面五路合起来写成结论 —— 脚本只备素材，不作判断。' : 'artifacts 关闭：只提供上面的文字资料，没有下载封面、字幕、视频或抽帧。')

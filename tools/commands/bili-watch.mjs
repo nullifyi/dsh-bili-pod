@@ -10,10 +10,9 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { requireFfmpeg } from '../lib/ffmpeg.mjs'
 import { dshPath } from '../lib/paths.mjs'
+import { config } from '../lib/config.mjs'
 
 
-let FFMPEG
-try { FFMPEG = requireFfmpeg() } catch (e) { console.error(String(e.message)); process.exit(2) }
 const bvid = process.argv[2]
 const grid = (process.argv[3] ?? '3x3').toLowerCase()
 const outDir = process.argv[4] ?? dshPath('shots', 'video')
@@ -31,6 +30,12 @@ if (view.code !== 0) { console.error(`view 失败 code=${view.code} ${view.messa
 const { cid, title, duration, owner } = { ...view.data, owner: view.data.owner?.name }
 console.log(`标题: ${title}`)
 console.log(`UP: ${owner}   时长: ${duration}s   cid=${cid}`)
+if (config().artifacts?.enabled !== true) {
+  console.log('artifacts 关闭：仅返回元信息，不下载视频、不生成字幕/帧/拼图。需要文字内容请使用 debrief。')
+  process.exit(0)
+}
+let FFMPEG
+try { FFMPEG = requireFfmpeg() } catch (e) { console.error(String(e.message)); process.exit(2) }
 
 // 画质实测（2026-10-14）：html5 + qn=32 会被压到 360p（返回 quality=16，界面小字全糊）；
 // 改 platform=pc + qn=80 可拿到 720p（返回 quality=64），依旧是普通 mp4 直链，不必碰 dash。
@@ -101,8 +106,7 @@ console.log(`取帧方式: ${how}`)
 console.log(`时间点  : ${times.map((t, i) => `${i + 1}=${fmt(t)}`).join('  ')}`)
 
 // 抽帧：每个时间点各抽一张原始分辨率，再拼图——这样 SHEET 与 SUBS 干净地共用同一批帧
-const tmp = path.join(outDir, `.frames-${stamp}`)
-fs.mkdirSync(tmp, { recursive: true })
+const tmp = fs.mkdtempSync(path.join(outDir, '.frames-'))
 try {
   times.forEach((t, i) => {
     execFileSync(FFMPEG, ['-y', '-loglevel', 'error', '-ss', t.toFixed(2), '-i', mp4,
@@ -112,10 +116,6 @@ try {
     `scale=480:-1,tile=${cols}x${rows}`, '-frames:v', '1', sheet], { stdio: 'inherit' })
   if (!fs.existsSync(sheet)) throw new Error('九宫格没生成')
   console.log(`\nSHEET: ${sheet}`)
-} catch (e) {
-  console.error('ffmpeg 抽帧失败：' + e.message); process.exit(6)
-}
-
 // 字幕条版：裁掉画面、只留底部字幕带再放大，竖着拼 N 条。
 // 依据（2026-10-14 实测）：这类"讲解型"视频字幕就是全部信息量，全画幅九宫格会把字幕压糊；
 // 同样预算下只留字幕带，9 条字幕能全部读清。用的是同一批帧。
@@ -127,7 +127,13 @@ try {
 } catch {
   console.log('（字幕条版生成失败，忽略——不影响 SHEET）')
 }
-fs.rmSync(tmp, { recursive: true, force: true })
+} catch (e) {
+  console.error('ffmpeg 抽帧失败：' + e.message)
+  process.exitCode = 6
+} finally {
+  fs.rmSync(tmp, { recursive: true, force: true })
+}
+if (process.exitCode) process.exit(process.exitCode)
 console.log(`（原片留着: ${mp4}；换参数重抽不必重新下载。加 --uniform 可强制等间隔）`)
 console.log('（提示：这条视频若有官方字幕，先跑 `node bili.mjs subtitles <BV>` 更省也更准——' +
   '抽帧是给"字幕没官方轨、或要看画面/界面"的情况用的）')

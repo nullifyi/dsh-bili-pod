@@ -5,7 +5,7 @@
 // 鲸群新增的一层：**本轮权限单**（lib/scope.mjs）。
 //   宿主每轮醒来/监听会写一份 <work>/scope.json，写明这一轮允许哪些写操作。
 //   写命令（comment / dm / fav / dynamic / danmaku / comment-del）不在单子里 → 这里直接拒绝。
-//   只读命令永远放行；手动跑（没有权限单 / 过期 >4h）也不限制。
+//   只读命令永远放行；没有自动轮权限单才视作手动轮，过期自动轮拒绝写操作。
 //   显式绕过：BILI_POD_SCOPE=off node bili.mjs …
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
@@ -113,10 +113,6 @@ function translateNamed(cmd, args) {
 }
 
 const entry = map[cmd]
-if (!entry) {
-  console.error(`未知命令: ${cmd}\n跑 "node bili.mjs help" 看清单。`)
-  process.exit(2)
-}
 
 // ── 本轮权限单 ────────────────────────────────────────────────────────────
 const HOME = process.env.USERPROFILE || process.env.HOME || os.homedir()
@@ -131,5 +127,22 @@ if (!gate.ok) {
 }
 if (gate.note) console.error('· ' + gate.note)
 
-const r = spawnSync(NODE_EXE, [path.join(here, entry[0]), ...translateNamed(cmd, rest)], { stdio: 'inherit' })
+let script = entry ? path.join(here, entry[0]) : null
+let modHost
+if (!entry) {
+  const [store, {PodHost}] = await Promise.all([import('../lib/store.mjs'), import('../lib/extensions.mjs')])
+  const config = store.readConfig()
+  if (config.extensions?.enabled !== false) {
+    modHost = new PodHost({workDir: WORK, readConfig: store.readConfig, dirs: [path.resolve(here, '../extensions'), ...store.USER_EXT_DIRS, ...(config.extensions?.dirs ?? [])]})
+    await modHost.loadAll()
+    script = modHost.commands.get(cmd)?.script
+  }
+  if (!script) {
+    await modHost?.close()
+    console.error(`未知或未启用的本地命令: ${cmd}\n跑 "node bili.mjs help" 看内置清单。`)
+    process.exit(2)
+  }
+}
+const r = spawnSync(NODE_EXE, [script, ...(entry ? translateNamed(cmd, rest) : rest)], { stdio: 'inherit' })
+await modHost?.close()
 process.exit(r.status ?? 1)

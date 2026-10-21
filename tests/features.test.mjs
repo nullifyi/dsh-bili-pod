@@ -153,14 +153,14 @@ test('scope: wake round may favourite and draft, but not post a comment when sha
   assert.match(denied.reason, /没有授权/)
 })
 
-test('scope: manual round is unrestricted; expired scope degrades to manual; bypass wins', async () => {
+test('scope: manual round is unrestricted; expired automatic scope denies writes; bypass wins', async () => {
   const { scopeFor, checkCommand } = await import('../lib/scope.mjs')
   const manual = scopeFor({ reason: 'manual', config: {} })
   assert.equal(checkCommand(manual, 'comment-del').ok, true)
   const stale = { active: true, reason: 'wake', at: new Date(Date.now() - 5 * 3600_000).toISOString(), allowWrite: ['fav'] }
   const r = checkCommand(stale, 'comment', { now: Date.now() })
-  assert.equal(r.ok, true)
-  assert.match(r.note, /过期/)
+  assert.equal(r.ok, false)
+  assert.match(r.reason, /过期/)
   assert.equal(checkCommand(stale, 'comment', { bypass: true }).ok, true)
 })
 

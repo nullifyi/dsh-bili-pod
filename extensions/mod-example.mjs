@@ -8,8 +8,8 @@
  *
  * pod 提供的能力（全部可选、按需用）：
  *   pod.on(event, fn)          订阅事件：tick / wake:before / wake:after / round:start /
- *                              round:end / ledger:write / diary:archived / verify:done /
- *                              comment:sent / login:ok / extensions:loaded
+ *                              round:delivered / ledger:write / diary:archived / verify:done /
+ *                              config:saved / login:ok / extensions:loaded
  *   pod.addPromptSection({id,title,text,priority})
  *                              往醒来的提示里插一段（text 可以是函数，拿到 {config,plan,scope}）
  *   pod.command({name,desc,script})    给 bili.mjs 加一个命令（script 是 .mjs 绝对路径）
@@ -22,8 +22,6 @@
  *
  * 这个示例本身什么也不干（note 为空时不插提示），可以当模板抄。
  */
-import fs from 'node:fs'
-import path from 'node:path'
 
 export default {
   id: 'mod-example',
@@ -49,12 +47,8 @@ export default {
 
     pod.route('/note', async () => ({ ok: true, note: note(), ext: 'mod-example' }))
 
-    pod.on('comment:sent', (payload) => {
-      try {
-        const dir = pod.dataDir()
-        fs.appendFileSync(path.join(dir, 'sent.log'),
-          `${new Date().toISOString()} ${JSON.stringify(payload)}\n`, 'utf8')
-      } catch (e) { pod.log('记 sent.log 失败：' + e.message) }
+    pod.on('round:delivered', (payload) => {
+      if (note()) pod.log(`会话已接收 ${payload.reason}（不表示任务完成）`)
     })
 
     pod.log('示例 mod 已就绪（note 为空 = 不影响任何东西）')

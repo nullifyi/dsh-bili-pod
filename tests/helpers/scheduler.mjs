@@ -35,7 +35,7 @@ const host={
 const opts=()=>({dshHome:dsh,biliMjs:'unused',cwd:process.env.USERPROFILE,workDir,diaryRoot,host})
 const messages=[]
 let fail=true,attempts=0
-const sched=startScheduler({sessionController:{create:async()=>{},prompt:async p=>{attempts++;if(fail)throw Error('delivery failure');messages.push(p.content[0].text)}}},opts())
+const sched=startScheduler({sessionController:{create:async()=>({sessionId:'fake-scheduler-session'}),prompt:async p=>{attempts++;if(fail)throw Error('delivery failure');messages.push(p.content[0].text);return {accepted:true}}}},opts())
 const samples=[.75,.9];const p=makePlan(cfg.night,{},now,()=>samples.shift())
 fs.writeFileSync(state,JSON.stringify(p))
 await sched.tick();assert.equal(attempts,0)
@@ -58,7 +58,7 @@ now=new RealDate('2026-10-23T23:00:00').getTime()
 cfg.night.skipChance=1;fs.writeFileSync(process.env.BILI_POD_CONFIG,JSON.stringify(cfg))
 const skip=makePlan(cfg.night,historyOf(before,now),now,()=>0)
 fs.writeFileSync(state,JSON.stringify(skip))
-const s2=startScheduler({sessionController:{create:async()=>{},prompt:async p=>messages.push(p.content[0].text)}},opts())
+const s2=startScheduler({sessionController:{create:async()=>({sessionId:'fake-scheduler-session'}),prompt:async p=>{messages.push(p.content[0].text);return {accepted:true}}}},opts())
 await s2.tick();s2.stop()
 assert.match(messages.at(-1),/今晚不看/);assert.ok(messages.at(-1).includes('关掉了推送'))
 assert.ok(messages.at(-1).includes('测试专属人设'))

@@ -212,16 +212,16 @@ node tools/bili.mjs artifacts save --file ./report.md --name 深夜显卡
 
 | 为什么醒 | 允许的写操作 |
 |---|---|
-| 生物钟醒来 | `fav`、`reply-draft`、`comment`（分享开着才有） |
+| 生物钟醒来 | `fav`、`reply-draft`、`comment`（分享开着才有）；显式开启 DM 分享时另有 `dm`（仍限主人且须互关） |
 | 监听别人找它 / 直播间 | `comment`、`reply-draft` |
 | 私信监听 | `comment`、`dm` |
 | 手动跑（你在终端里） | 不限制 |
 
 `发动态` / `发弹幕` / `删评论` 默认**不给**：它们不是「刷一轮视频」该做的事。
-要开：设置 → 鲸群 → 写权限（三个独立开关）。权限单 **4 小时**后自动失效（按手动轮处理），
+要开：设置 → 鲸群 → 写权限（三个独立开关）。自动轮权限单 **4 小时**后拒绝写操作，等宿主重新签发；无自动轮权限单或 active=false 才按手动轮处理。
 在命令前设 `BILI_POD_SCOPE=off` 可以显式绕过。
 
-> 权限单只拦「写」。看视频、读评论、抽字幕永远放行。
+> 这是 CLI 命令策略，不是系统沙箱，不能阻止同权限进程直接执行其他脚本。默认 `artifacts.enabled=false` 时 `debrief` 只输出文字，`watch-video` 只输出元信息，不持久保存封面、字幕、视频或帧；开启后保留原有素材输出。日记和账本不受此开关影响。
 
 ---
 
@@ -244,17 +244,18 @@ export default {
       text: ({ config }) => config.extensions?.items?.hello?.note || '',
     })
     pod.route('/ping', async () => ({ ok: true, pong: 1 }))
-    pod.on('comment:sent', async (e) => {
+    pod.on('round:delivered', async (e) => {
       const fs = await import('node:fs')
-      fs.appendFileSync(pod.dataDir() + '/sent.log', JSON.stringify(e) + '\n')
+      fs.appendFileSync(pod.dataDir() + '/delivered.log', JSON.stringify(e) + '\n')
     })
   },
 }
 ```
 
 能做什么：`addPromptSection`（插进醒来提示）、`field`（设置页里多一个输入框）、`command`（多一个 `bili.mjs` 子命令）、
-`route`（多一个 `/dsh-bili/api/ext/<id>/…` 路由）、`on(event)`（11 个事件：tick / wake:before|after /
-round:start|end / ledger:write / diary:archived / verify:done / comment:sent / login:ok / extensions:loaded）。
+`route`（多一个 `/dsh-bili/api/ext/<id>/…` 路由）、`on(event)`（tick / wake:before|after /
+round:start / round:delivered / ledger:write / diary:archived / verify:done / config:saved / login:ok / extensions:loaded）。
+事件的触发边界见 [扩展文档](extensions/README.md)；`round:delivered` 表示 DSH 已接收，不能据此宣称工作完成。当前没有可靠的 `round:end`，独立 CLI 也没有 `comment:sent` 事件总线。
 
 设置页 → 鲸群 → 扩展：能看到装了什么、可以停用 / 重载。
 每个回调 **8 秒超时**、异常隔离（一个 mod 坏了不影响别的）。
