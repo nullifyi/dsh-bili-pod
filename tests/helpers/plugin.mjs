@@ -8,7 +8,7 @@ globalThis.setInterval=()=>({});globalThis.setTimeout=()=>({});globalThis.clearI
 cp.execFile=(exe,args,options,cb)=>{
   if(args.includes('comment')) {
     const success=process.env.TEST_SEND_SUCCESS==='1'
-    queueMicrotask(()=>cb(success?null:new Error('mock send failure'),success?'code=0 rpid=123':'code=-101',''))
+    queueMicrotask(()=>cb(success?null:new Error('mock send failure'),success?'code=0\n已发布，评论 rpid=123':'code=-101',''))
   } else {
     assert.ok(args.includes('take')||args.includes('add'))
     const r=cp.spawnSync(exe,args,{...options,encoding:'utf8'})

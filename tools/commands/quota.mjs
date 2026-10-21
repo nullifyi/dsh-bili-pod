@@ -16,6 +16,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { config } from '../lib/config.mjs'
 import { NODE_EXE } from '../lib/nodebin.mjs'   // 2026-10-21：别用 process.execPath（Electron 里它是主程序 ✗）
+import { withFileLock, atomicJson } from '../../lib/file-state.mjs'
 
 const FILE = path.join((process.env.USERPROFILE || process.env.HOME || '/'), '.bili-ai', 'quota.json')
 // 额度与白名单优先来自统一配置（lib/config.mjs）；本文件自己的 quota.json 仍是运行账本
@@ -32,7 +33,6 @@ const load = () => {
   //   以前 load 会把 quota.json 里固化的旧值盖在新配置上 → 设置页改了不生效且无提示 ✗
   return { ...DEFAULTS, log: Array.isArray(raw.log) ? raw.log : [] }
 }
-const save = (q) => { fs.mkdirSync(path.dirname(FILE), { recursive: true }); fs.writeFileSync(FILE, JSON.stringify({ log: q.log ?? [] }, null, 2) + '\n') }
 // ── 沉默衰减（2026-10-18 加，主人定）────────────────────────────────
 // 反馈的定义：**任何表态都算**（回她的评论 / 点赞 / 在微信里说一句 / 让她做点事…）
 // 都没有 = 沉默。沉默 ≥ silentAfterDays(3) 天开始扣：每天 -decayPerDay(1)，
@@ -164,8 +164,13 @@ if (cmd === 'check') {
 
 if (cmd === 'record') {
   const type = typeof opt.type === 'string' ? opt.type : 'unknown'
-  q.log.push({ at: new Date().toISOString(), type, auto: !!opt.auto || !!opt.share, share: !!opt.share, target: opt.target ?? null, note: opt.note ?? null })
-  save(q)
+  withFileLock(FILE, () => {
+    Object.assign(q, load())
+    if (corrupt) throw new Error('配额记录损坏，未覆盖原文件')
+    const operationId = typeof opt['operation-id'] === 'string' ? opt['operation-id'] : ''
+    if (!operationId || !q.log.some(x => x.operationId === operationId)) q.log.push({ at: new Date().toISOString(), type, operationId, auto: !!opt.auto || !!opt.share, share: !!opt.share, target: opt.target ?? null, note: opt.note ?? null })
+    atomicJson(FILE, { log: q.log })
+  })
   const usedAuto = q.log.filter((x) => dayOf(x.at) === today() && x.auto && !x.share).length
   const usedShare = q.log.filter((x) => dayOf(x.at) === today() && x.share).length
   console.log(`已记账：${type}${opt.share ? '（分享型·@主人）' : opt.auto ? '（自主）' : '（主人授权）'}${opt.target ? ' → ' + opt.target : ''}   今日分享 ${usedShare}/${q.shareDaily ?? 3}（自主发言不设上限 ✓）`)

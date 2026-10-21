@@ -14,12 +14,12 @@
 //   node reply-draft.mjs list [--json]
 //   node reply-draft.mjs drop <id>
 //   node reply-draft.mjs take <id>        （插件审批时用：取出参数并从队列删掉）
-import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { NODE_EXE } from '../lib/nodebin.mjs'   // 2026-10-21：别用 process.execPath（Electron 里它是主程序 ✗）
+import { withFileLock, readJson, atomicJson } from '../../lib/file-state.mjs'
 
 const HOME = process.env.USERPROFILE || process.env.HOME || '.'
 const FILE = path.join(HOME, '.bili-ai', 'pending-replies.json')
@@ -35,33 +35,31 @@ for (let i = 1; i < argv.length; i += 1) {
   } else if (!opt._a) opt._a = argv[i]
 }
 
-const load = () => {
-  try { const j = JSON.parse(fs.readFileSync(FILE, 'utf8')); return { items: Array.isArray(j.items) ? j.items : [] } }
-  catch { return { items: [] } }
-}
-const save = (o) => { fs.mkdirSync(path.dirname(FILE), { recursive: true }); fs.writeFileSync(FILE, JSON.stringify(o, null, 2) + '\n') }
+const load = () => readJson(FILE, { items: [] })
 
 if (cmd === 'add') {
-  const { oid, bvid, root, parent, who, message, src } = opt
+  const { oid, bvid, root, who, message, src, referer } = opt
+  const parent = opt.parent || root
+  const type = String(opt.type || '1')
   if (!oid || !message) { console.error('需要 --oid 和 --message'); process.exit(2) }
-  if (!root || !parent) { console.error('回复要有 --root 和 --parent（坐标从 comment-digest 拿）'); process.exit(2) }
+  if (!root) { console.error('回复要有 --root（省略 parent 时回复该根评论）'); process.exit(2) }
   const text = String(message).trim()
   if (text.length > 500) { console.error('草稿太长（>500），砍短'); process.exit(2) }
-  const db = load()
-  // 同一个 parent 不重复排队 ✓
-  if (db.items.some((x) => String(x.parent) === String(parent))) {
-    console.log('（这个 parent 已经在队列里了，没重复加 ✓）')
-    process.exit(0)
-  }
-  const item = {
+  const item = withFileLock(FILE, () => {
+    const db = load()
+    if (db.items.some(x => String(x.oid) === String(oid) && String(x.type || '1') === type && String(x.parent) === String(parent))) return null
+    const value = {
     id: crypto.randomBytes(4).toString('hex'),
     at: new Date().toISOString(),
-    oid: String(oid), bvid: bvid ? String(bvid) : '', root: String(root), parent: String(parent),
+    oid: String(oid), type, referer: referer ? String(referer) : '', bvid: bvid ? String(bvid) : '', root: String(root), parent: String(parent),
     who: who ? String(who) : '', src: src ? String(src).slice(0, 300) : '',
     message: text,
-  }
-  db.items.push(item)
-  save(db)
+    }
+    db.items.push(value)
+    atomicJson(FILE, db)
+    return value
+  })
+  if (!item) { console.log('（这个评论已在队列里，未重复添加）'); process.exit(0) }
   console.log(`✓ 已进待审队列：${item.id} → ${item.who || '（对方）'} · ${text.length} 字`)
 
   // 2026-10-18 主人定：**需要审核的回复直接推送给主人** ✓（不做设置页 UI ✗）
@@ -112,11 +110,16 @@ if (cmd === 'show') {
 if (cmd === 'drop' || cmd === 'take') {
   const id = opt._a
   if (!id) { console.error('用法: node reply-draft.mjs drop <id>'); process.exit(2) }
-  const db = load()
-  const hit = db.items.find((x) => x.id === id)
+  const hit = withFileLock(FILE, () => {
+    const db = load()
+    const item = db.items.find(x => x.id === id)
+    if (!item) return null
+    if (item.status && item.status !== 'pending') throw new Error(`当前状态 ${item.status}，请先人工核对发送结果`)
+    db.items = db.items.filter(x => x.id !== id)
+    atomicJson(FILE, db)
+    return item
+  })
   if (!hit) { console.error(`没有这个 id：${id}`); process.exit(2) }
-  db.items = db.items.filter((x) => x.id !== id)
-  save(db)
   if (cmd === 'take') console.log(JSON.stringify(hit))
   else console.log(`✓ 已删掉 ${id}`)
   process.exit(0)

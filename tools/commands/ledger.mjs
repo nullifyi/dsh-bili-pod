@@ -65,9 +65,11 @@ if (sub === 'write') {
     const i = kv.indexOf('=')
     if (i > 0) extra[kv.slice(0, i)] = kv.slice(i + 1)
   }
-  const r = appendRound({ root: workDir, mode, title, body, extra })
+  const operationId = String(get('operation-id', process.env.BILI_POD_ROUND_ID || ''))
+  const r = appendRound({ root: workDir, mode, title, body, extra, operationId })
   console.log(`✅ 账已落：${r.file}`)
   console.log(`   mode=${mode} prev=${String(r.meta.prev).slice(0, 12)} hash=${r.hash.slice(0, 12)}`)
+  if (r.indexError) console.log(`   账已提交；索引待重建：${r.indexError}`)
   process.exit(0)
 }
 

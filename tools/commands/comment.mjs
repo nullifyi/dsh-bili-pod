@@ -18,6 +18,8 @@ import { config } from '../lib/config.mjs'
 import { validateShare } from '../lib/share-policy.mjs'
 import { NODE_EXE } from '../lib/nodebin.mjs'   // 2026-10-21：别用 process.execPath（Electron 里它是主程序 ✗）
 import { recordSent } from '../../lib/verifycomments.mjs'
+import { checkApproval, beginSend, finishSend, coordinates } from '../../lib/comment-state.mjs'
+import { withFileLock, atomicJson } from '../../lib/file-state.mjs'
 
 // ── 限额闸（B 档「限额自主」的代码强制部分，2026-10-14 主人选 B 档）────────────────
 // 语义：闸门**只管自主发言**（带 --auto，即"她自己决定说的"）；主人当场授权的发言不拦 ✓
@@ -29,25 +31,22 @@ const SHARE = process.argv.includes('--share')
 // --once-per-person（2026-10-17 加）：同一个人 30 天内最多只回一条（只对"回复某人"生效）。
 // 2026-10-18 接线：不传旗标时按配置决定（config.listen.oncePerPerson ✓ 设置页那个开关）
 //   —— 只在"回复某人"（带 --parent）时生效；分享/顶层评论不受影响 ✓
-const ONCE = process.argv.includes('--once-per-person')
-  || (process.argv.includes('--parent') && config().listen?.oncePerPerson === true)
 const ONCE_DAYS = 30
 // 鲸群（2026-10-22）：
-//   --verify   发完立刻复核「公开可见没有」（默认跟随 config.review.verify）
-//   --reviewed 由「主人批准草稿」的宿主调用带上 —— 表示这条已经过人工审核
+//   --verify   发完立刻复核「本人登录可见没有」（默认跟随 config.review.verify）
+//   --approval / --operation-id 由宿主签发并绑定正文和坐标，消费一次
 const VERIFY = process.argv.includes('--verify') || config().review?.verify !== false
-const REVIEWED = process.argv.includes('--reviewed')
 const REPLIED = path.join(process.env.USERPROFILE || process.env.HOME || '.', '.bili-ai', 'replied.json')
 const loadReplied = () => { try { return JSON.parse(fs.readFileSync(REPLIED, 'utf8')) } catch { return { byUid: {} } } }
-const saveReplied = (o) => { try { fs.mkdirSync(path.dirname(REPLIED), { recursive: true }); fs.writeFileSync(REPLIED, JSON.stringify(o, null, 2) + '\n') } catch {} }
 // 查出"被回复的那个人"是谁（reply/reply 里 rpid === parent 的那条的作者）
 async function parentAuthor(aid, rootRpid, parentRpid) {
   for (let pn = 1; pn <= 4; pn += 1) {
-    const j = await (await fetch(`https://api.bilibili.com/x/v2/reply/reply?type=1&oid=${aid}&root=${rootRpid}&pn=${pn}&ps=20`, {
+    const j = await (await fetch(`https://api.bilibili.com/x/v2/reply/reply?type=${type}&oid=${aid}&root=${rootRpid}&pn=${pn}&ps=20`, {
+      signal: AbortSignal.timeout(10000),
       headers: { 'user-agent': 'Mozilla/5.0', referer: 'https://www.bilibili.com/' },
     })).json()
     const list = j.data?.replies ?? []
-    const hit = list.find((r) => String(r.rpid) === String(parentRpid))
+    const hit = [j.data?.root, ...list].filter(Boolean).find((r) => String(r.rpid_str ?? r.rpid) === String(parentRpid))
     if (hit) return { mid: String(hit.mid ?? hit.member?.mid ?? ''), name: hit.member?.uname ?? '' }
     if (!list.length) break
   }
@@ -56,7 +55,7 @@ async function parentAuthor(aid, rootRpid, parentRpid) {
 const quota = (args) => {
   try {
     return { code: 0, out: execFileSync(NODE_EXE,
-      [path.join(path.dirname(fileURLToPath(import.meta.url)), 'quota.mjs'), ...args], { encoding: 'utf8' }).trim() }
+      [path.join(path.dirname(fileURLToPath(import.meta.url)), 'quota.mjs'), ...args], { encoding: 'utf8', timeout: 10000 }).trim() }
   } catch (e) { return { code: e.status ?? 1, out: String(e.stdout ?? e.message).trim() } }
 }
 
@@ -69,7 +68,9 @@ const oid = args.get('oid')
 const bvid = args.get('bvid')
 let message = args.get('message')
 const root = args.get('root')     // 线程根评论 rpid（二级回复用）
-const parent = args.get('parent') // 要回复的那条评论 rpid
+const parent = args.get('parent') || root // root-only means reply to the root author
+const ONCE = process.argv.includes('--once-per-person') || (parent && config().listen?.oncePerPerson === true)
+let replyAuthor = null
 // type=1 视频（默认）；type=11 动态/图文。⚠️ 动态的 oid 必须用
 // polymer/web-dynamic/v1/detail 给的 basic.comment_id_str，**不是** dyn_id 本身
 // （拿 dyn_id 当 oid 一律 -404，2026-10-13 实测踩过）。
@@ -113,6 +114,14 @@ if (SHARE) {
   }
 }
 
+const draft = coordinates({ oid, type, root, parent, message })
+const approval = { operationId: args.get('operation-id'), token: args.get('approval') }
+const needsApproval = config().review?.preReview !== false && !!(root || parent)
+if (!dry && ((needsApproval || approval.token) && !checkApproval(draft, approval))) {
+  console.error('[审核] 需要宿主批准的同坐标、同正文一次性凭据；--reviewed 不能代替审核。')
+  process.exit(7)
+}
+
 // "同一个人只回一条"（可选 · 2026-10-17 加）：只在二级回复（--root + --parent）时生效。
 // 用在"只回直接回她的人"那条流程里 → 同一个人 30 天内不会被回第二次（防拉锯、防被当聊天机器人）。
 // 放在入口处（--dry 也会跑），这样"能不能回"在发之前就能知道。
@@ -121,6 +130,7 @@ if (ONCE) {
     console.log('  [once] 没有 --root/--parent —— 这个开关只对"回复某人"生效，已忽略')
   } else {
     const who = await parentAuthor(oid, root, parent)
+    replyAuthor = who
     if (!who?.mid) {
       // fail-closed（2026-10-17，Kimi 评审指出）：判重系统状态未知时，默认动作是**这次不回**
       console.error('  [once] 没查到被回复者的 uid → 判重状态未知，**这次不回**（fail-closed）')
@@ -139,29 +149,6 @@ if (ONCE) {
   }
 }
 
-// ── 发前审核（review.preReview，默认开）────────────────────────────────────
-// 主人在 2026-10-22 定：给「其他人」的回复，默认要先变成草稿让他点头。
-//   · 主人本人的楼层 → 照旧可以直接回（他不需要审自己的回复）
-//   · 分享型（--share）是顶层评论，不适用
-//   · 宿主「批准并发出」时会带 --reviewed 跳过这里
-//   · --dry 也放行（预览不产生任何公开动作）
-//   · 查不到被回复者 → fail-closed（和 --once-per-person 同一条纪律）
-if (config().review?.preReview !== false && parent && root && !REVIEWED && !SHARE && !dry) {
-  const who = await parentAuthor(String(oid), String(root), String(parent))
-  const ownerMid = String(config().owner?.mid ?? '')
-  if (!who?.mid) {
-    console.error('  [审核] 查不到被回复的人 → 判不了该不该审，**这次不发**（fail-closed）')
-    console.error('  → 先 `reply-draft add …` 进队列，等主人批；或确认对方是主人后再手动加 --reviewed')
-    process.exit(7)
-  }
-  if (!ownerMid || String(who.mid) !== ownerMid) {
-    console.error(`  [审核] 「发前审核」开着：给 ${who.name || who.mid} 的回复要先交草稿 ——`)
-    console.error('  `node bili.mjs reply-draft add --oid … --root … --parent … --who … --src "他说的话" --message "你的回复"`')
-    console.error('  主人批准后由宿主用 --reviewed 发出；主人在设置 → 鲸群 → 审核 里可以关掉这一层。')
-    process.exit(7)
-  }
-  console.log(`  [审核] 对方是主人本人（mid ${who.mid}）→ 不需要审核，直接回`)
-}
 
 const credPath = path.join((process.env.USERPROFILE || process.env.HOME || '/'), '.bili-ai', 'credentials.json')
 if (!fs.existsSync(credPath)) {
@@ -189,6 +176,7 @@ const MIXIN_TAB = [46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,33,9,
 const keyOf = (u) => u.slice(u.lastIndexOf('/') + 1, u.lastIndexOf('.'))
 async function wbiSign(params) {
   const nav = await (await fetch('https://api.bilibili.com/x/web-interface/nav', {
+    signal: AbortSignal.timeout(10000),
     headers: { 'user-agent': UA, referer: 'https://www.bilibili.com/', cookie: cookieHeader },
   })).json()
   const img = nav?.data?.wbi_img?.img_url
@@ -208,6 +196,7 @@ async function wbiSign(params) {
 
 // ---- who is behind this cookie? --------------------------------------------
 const nav = await (await fetch('https://api.bilibili.com/x/web-interface/nav', {
+  signal: AbortSignal.timeout(10000),
   headers: { 'user-agent': UA, referer: 'https://www.bilibili.com/', cookie: cookieHeader },
 })).json()
 console.log('=== 登录态校验（只读） ===')
@@ -255,7 +244,13 @@ if (dry) {
 
 // 判重（--once-per-person）已在入口处检查，这里直接发
 console.log('\n[go] 发送中…')
-const res = await fetch(url, {
+let operationId
+try { operationId = beginSend(draft, { ...approval, required: needsApproval }) }
+catch (e) { console.error('[审核] ' + e.message); process.exit(7) }
+let res, out
+try {
+res = await fetch(url, {
+  signal: AbortSignal.timeout(15000),
   method: 'POST',
   headers: {
     'user-agent': UA,
@@ -266,34 +261,39 @@ const res = await fetch(url, {
   },
   body,
 })
-const out = await res.json().catch(async () => ({ raw: await res.text() }))
+out = await res.json()
+} catch (e) {
+  finishSend(operationId, 'uncertain', { reason: String(e.message).slice(0, 200) })
+  console.error(`[发送结果不明] operationId=${operationId}；请人工核对，勿重发`)
+  process.exit(8)
+}
 console.log(`  HTTP ${res.status}`)
 console.log(`  code=${out.code} message=${out.message ?? ''}`)
 if (out.code === 0) {
   const rpid = out.data?.rpid_str ?? out.data?.rpid
+  if (!rpid || (typeof rpid === 'number' && !Number.isSafeInteger(rpid))) {
+    finishSend(operationId, 'uncertain', { reason: '成功响应缺少精确 rpid' })
+    console.error(`[发送结果不明] operationId=${operationId}；响应缺少精确 rpid，勿重发`)
+    process.exit(8)
+  }
+  finishSend(operationId, 'accepted', { rpid: String(rpid), code: 0, accountingStatus: 'pending' })
   console.log(`  ✅ 已发布，评论 rpid=${rpid}`)
-  // 鲸群：记进「待复核」清单 —— 宿主隔一会儿会去查它到底公开可见没有
+  let accountingComplete = true
+  // 已发送凭据先落盘；后续复核只描述本次观察范围。
   try {
     recordSent({
       rpid: String(rpid ?? ''), oid: String(oid), bvid: bvid ? String(bvid) : '',
       root: root ? String(root) : '', parent: parent ? String(parent) : '',
-      message: String(message).slice(0, 300), type,
+      message: String(message).slice(0, 300), type, operationId,
     })
-    console.log('  [复核] 已记入待复核清单（宿主每 5 分钟扫一次）')
-  } catch (e) { console.log(`  [复核] 记账失败（不影响已发出的评论）：${String(e.message).slice(0, 80)}`) }
-  if (VERIFY) {
-    try {
-      const v = execFileSync(NODE_EXE, [path.join(path.dirname(fileURLToPath(import.meta.url)), 'verify-now.mjs'), '--rpid', String(rpid)], { encoding: 'utf8' })
-      console.log(String(v).trim())
-    } catch (e) {
-      console.log(`  [复核] 立刻复核没跑成 —— 但**发送是成功的**，别当成没发出去（${String(e.message).slice(0, 90)}）`)
-    }
-  }
+    console.log('  [复核] 已记入待复核清单')
+  } catch (e) { accountingComplete = false; console.log(`  [复核] 记账失败（不影响已发出的评论）：${String(e.message).slice(0, 80)}`) }
   // once-per-person：记一笔"回过谁"，下次判重用
   if (ONCE && parent && root) {
     try {
-      const who = await parentAuthor(oid, root, parent)
+      const who = replyAuthor
       if (who?.mid) {
+        withFileLock(REPLIED, () => {
         const led = loadReplied()
         led.byUid ??= {}
         led.byUid[who.mid] ??= []
@@ -303,22 +303,33 @@ if (out.code === 0) {
           led.byUid[k] = led.byUid[k].filter((x) => Date.now() - new Date(x.at).getTime() < ONCE_DAYS * 86_400_000)
           if (!led.byUid[k].length) delete led.byUid[k]
         }
-        saveReplied(led)
+        atomicJson(REPLIED, led)
+        })
         console.log(`  [once] 已记账：${who.name || who.mid}（30 天内不再回他）`)
       }
-    } catch (e) { console.log(`  [once] 记账失败（不影响已发出的评论）：${String(e.message).slice(0, 80)}`) }
+    } catch (e) { accountingComplete = false; console.log(`  [once] 记账失败（不影响已发出的评论）：${String(e.message).slice(0, 80)}`) }
   }
   // 记账（发出去才算数）
   const rec = quota(['record', '--type', 'comment', '--target', bvid ? `BV:${bvid}` : `oid:${oid}`,
+    '--operation-id', operationId,
     '--note', message.replace(/\s+/g, ' ').slice(0, 40), ...(SHARE ? ['--share'] : AUTO ? ['--auto'] : [])])
   console.log(`  [限额闸] ${rec.out}`)
+  if (rec.code !== 0) accountingComplete = false
+  finishSend(operationId, 'accepted', { accountingStatus: accountingComplete ? 'complete' : 'incomplete' })
+  if (!accountingComplete) console.log('  [记账] 已发送，本地记账未完整；请人工核对，勿重发。跳过本次可选复核。')
+  if (VERIFY && accountingComplete) {
+    try {
+      const v = execFileSync(NODE_EXE, [path.join(path.dirname(fileURLToPath(import.meta.url)), 'verify-now.mjs'), '--rpid', String(rpid)], { encoding: 'utf8', timeout: 12000, windowsHide: true })
+      console.log(String(v).trim())
+    } catch (e) { console.log(`  [复核] 暂未完成；发送已成功，不重发（${String(e.message).slice(0, 90)}）`) }
+  }
   // 自主 / 分享型 → **自动报备**（把 AGENTS 里的"约定"落到代码里；后端由 config.notify 决定）
   if (AUTO || SHARE) {
     try {
       const msg = `[${SHARE ? '分享型·@主人' : '自主发言'}] 评论已发出 rpid=${rpid}\n目标：${bvid ? 'BV:' + bvid : 'oid:' + oid}\n内容：${message.slice(0, 80)}`
       execFileSync(NODE_EXE,
         [path.join(path.dirname(fileURLToPath(import.meta.url)), 'notify.mjs'), msg, '--title', SHARE ? '分享评论报备' : '自主发言报备'],
-        { stdio: 'inherit' })
+        { stdio: 'inherit', timeout: 10000, windowsHide: true })
     } catch (e) {
       console.log(`  [通知] 发出去了但报备失败：${String(e.message).slice(0, 120)}——请手动告诉使用者`)
     }
@@ -328,6 +339,7 @@ if (out.code === 0) {
     : `  ${referer.replace(/\/$/, '')}#reply${rpid}`)
   process.exit(0) // P0-6：成功
 } else {
+  finishSend(operationId, typeof out.code === 'number' ? 'rejected' : 'uncertain', { code: out.code ?? null, reason: String(out.message ?? '') })
   const hints = {
     '-101': '账号未登录：cookie 失效',
     '-102': '账号被封停',
