@@ -137,6 +137,38 @@ if (scenario === 'draft') {
   const text = wakePrompt({ st: { date: '2026-10-22', atMs: 123 }, cfg, today: '2026-10-22' })
   assert.match(text, /operation-id "report:2026-10-22:123"/)
   assert.doesNotMatch(text, /主人.*免审/)
+} else if (scenario === 'scheduler-legacy-not-found') {
+  const v = await import('../../lib/verifycomments.mjs')
+  v.writeSent({ items: [{ rpid: '55', oid: '45', type: '11', root: '2', at: '2026-10-22T00:00:00Z', verified: 'not-found' }] })
+  let now = 10000000
+  Date.now = () => now
+  globalThis.setInterval = globalThis.setTimeout = () => ({})
+  globalThis.clearInterval = globalThis.clearTimeout = () => {}
+  const { startScheduler } = await import('../../lib/scheduler.js')
+  const cfg = { review: { verify: true, verifyRounds: 2, verifyIntervalSec: 5 }, ledger: { enabled: false }, diary: {}, listen: {}, night: {} }
+  const sched = startScheduler({}, { dshHome: process.env.DSH_HOME, workDir: process.env.BILI_POD_WORK, diaryRoot: process.env.BILI_POD_DIARY, log() {}, host: {
+    readConfig: () => cfg,
+    verifyRecent: opts => v.verifyRecent({ ...opts, now, cred: { sessdata: 'fake' } }),
+  } })
+  await sched.verifyTick()
+  assert.equal(v.readSent().items[0].verifyAttempts, 1, 'scheduler must observe a legacy not-found record without another pending record')
+  assert.equal(v.readSent().items[0].verified, null)
+  now += 4999; await sched.verifyTick(); assert.equal(v.readSent().items[0].verifyAttempts, 1)
+  now++; await sched.verifyTick(); assert.equal(v.readSent().items[0].verifyAttempts, 2)
+  assert.equal(v.readSent().items[0].verified, 'unconfirmed')
+  now += 5000; await sched.verifyTick(); assert.equal(v.readSent().items[0].verifyAttempts, 2)
+  assert.equal(requests().filter(x => x.cookie && x.url?.includes('/reply/reply')).length, 2)
+  sched.stop()
+} else if (scenario === 'credentials-bom') {
+  const file = path.join(home, '.bili-ai/credentials.json')
+  const cred = { sessdata: 'FAKE-BOM-ONLY', bili_jct: 'b'.repeat(32), buvid3: 'fake' }
+  fs.writeFileSync(file, '\uFEFF' + JSON.stringify(cred))
+  const { readCred } = await import('../../lib/verifycomments.mjs')
+  assert.deepEqual(readCred(), cred, 'valid fake BOM credentials retain login compatibility')
+  const { readJson } = await import('../../lib/file-state.mjs')
+  assert.throws(() => readJson(file, null), SyntaxError, 'BOM compatibility is limited to credentials')
+  fs.writeFileSync(file, '{broken')
+  assert.equal(readCred(), null)
 } else if (scenario === 'append-sent') {
   const v = await import('../../lib/verifycomments.mjs')
   v.recordSent({ rpid: process.argv[3], oid: '1', type: '1' })

@@ -48,7 +48,7 @@ test('actual CLI recognizes data.root author and preserves normalized coordinate
   const replied = JSON.parse(fs.readFileSync(path.join(env.HOME, '.bili-ai/replied.json')))
   assert.equal(replied.byUid['333'].length, 1)
 })
-for (const scenario of ['draft', 'approval', 'host-timeout', 'host-receipt', 'host-uncertain', 'host-rejected', 'verify', 'scheduler-verify', 'verify-send-error', 'verify-send-hang', 'verify-send-accounting', 'sent-race', 'stale-lock', 'ledger']) test('offline contract: ' + scenario, t => {
+for (const scenario of ['draft', 'approval', 'host-timeout', 'host-receipt', 'host-uncertain', 'host-rejected', 'verify', 'scheduler-verify', 'scheduler-legacy-not-found', 'credentials-bom', 'verify-send-error', 'verify-send-hang', 'verify-send-accounting', 'sent-race', 'stale-lock', 'ledger']) test('offline contract: ' + scenario, t => {
   const r = run(sandbox(t), 'tests/helpers/send-contract-worker.mjs', [scenario])
   assert.equal(r.status, 0, r.stdout + r.stderr)
 })
