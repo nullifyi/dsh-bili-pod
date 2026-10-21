@@ -1,0 +1,47 @@
+{
+  "name": "dsh-bili-pod",
+  "version": "0.5.0",
+  "description": "鲸群：在 dsh-bili-whale 基座上的「可插拔」B 站生活 —— 扫码登录、峰谷生物钟、分栏日记 + 分类记录库、带哈希链的账本、评论发出后复核、mod 扩展接口。设置里有「鲸群」完整设置页。",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "bilibili",
+    "agent",
+    "diary",
+    "mod",
+    "extension"
+  ],
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/planner.test.mjs tests/integration.test.mjs tests/features.test.mjs"
+  },
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "tools",
+    "vendor",
+    "extensions",
+    "cordis.patch.yml",
+    "README.md",
+    "CHANGELOG.md",
+    "NOTICE.md",
+    "examples",
+    "tests"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [],
+      "platform": "web"
+    }
+  },
+  "license": "MIT"
+}

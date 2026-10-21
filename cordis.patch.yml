@@ -1,0 +1,18 @@
+# ============================================================================
+# dsh-bili-pod —— DSH bundle patch（fork 自 dsh-bili-whale）
+# ============================================================================
+# 插件挂载声明：DSH 启动时把本插件插进 profile 的配置树。
+#
+# 安装（本地 link）：
+#   dsh plugin --profile desktop add "link:F:\\dsh\\project\\robo\\dsh-bili-pod"
+# 或发布后：
+#   dsh plugin --profile desktop add dsh-bili-pod
+#
+# ⚠️ `name:` 必须与安装后的**包名**完全一致（dsh-bili-pod），否则表现为
+#    「装上了但设置页 404」。
+# 装完后在「设置 → 鲸群」里配置（客户端 section，不依赖额外 HTTP 页面）。
+# ============================================================================
+
+- insert:
+    - id: dsh-bili-pod
+      name: dsh-bili-pod
