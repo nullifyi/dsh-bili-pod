@@ -46,7 +46,32 @@
 6. 已只读核对已安装 DSH 2.0.19-next 的 app.asar 内 dsh-api-session-controller：prompt 返回 accepted 是接收确认，不是 agent 本轮完成；create 返回实际 sessionId，指定已有非空 session 可能改建新会话。实现和回归须遵循原生契约，不吞真实创建失败、不把投递完成冒称工作完成；事件文档区分接收与实际完成，缺乏可靠完成来源时明确未支持，不自己发明宿主 API。保持可复用会话意图并尊重实际返回身份。
 7. TDD，离线模拟会话与网络、临时目录，全部测试/语法/diff检查并提交，task-3-report.md 精确记录证据。
 
-### Task 4: 能力差集、登录回归与完整验收交付
+### Task 4: 扫码生命周期与轻量运行设置
+
+先读本任务正文，不必读取其他任务历史。全局约束同上：仅隔离分支；fake HOME/USERPROFILE/DSH_HOME 和阻断未匹配网络；不得真实登录、发送、改安装、读凭据/.token；使用现有 Node/原生设置，不新框架。TDD、提交自己的生产/tests/docs，不带 controller 的计划文件；完整报告 task-4-report.md。
+
+1. 扫码使用真实 host 路由与假网络覆盖 waiting/scanned/expired/成功。增加取消操作；只允许当前有效会话提交凭据。重新生成、取消、过期、手动保存或卸载后，在途旧 poll/QR 响应均不能覆盖新凭据/新 UI。生成请求本身的乱序也须覆盖。成功凭据可通过现有读取逻辑复用、不回显值。客户端取消/卸载清理计时与在途响应；用行为测试，不只 grep。
+2. 原scroll F:/dsh/project/robo/dsh-bili-scroll/index.js 是运行语义参考；不得修改参考仓。补全可直接接入的设置并保持原缺省行为：reportLevel full/brief/off（仅控制可选报告/notify，不禁掉要求的日记/账本）、commentPerRound 0–20、replyPerRound 1–10、replyToComments（只处理直接回复自己评论的通知，不是楼层深度）、share.via comment/dm/both。both 表示公开分享再给主人私信，须沿用原审核/主人互关/现有共享日配额与去重，不能双倍计入同一分享或靠提示绕过代码闸门。若实际已有策略不能安全支持双渠道，先向controller报具体接口冲突，不擅自放开额度或凭空宣称已支持。
+3. 每轮数量是沿scroll的agent预算设置，必须实际进入对应 wake/listen prompt；清楚标明它不是进程安全沙箱。零评论必须使自动轮无评论写权限；所有回复继续默认审核。新 replyToComments 过滤必须在实际通知消费路径生效，不能只加UI；保留现有用户设置兼容，缺省不扩大对外行动。
+   普通DM回复也用现有pending/宿主批准/一次性状态接线，绑定目标与正文；不得以listen.dm默认关闭代替实际发送闸门，移除prompt的主人免审例外。默认preReview开启时普通非share DM须批准；可选关闭后仍保留主人互关限制。both只允许已accepted且share=true的公开评论operationId的单次主人DM续送，严格同正文、同BV，原配额已提交则不重复入账，uncertain不自动重试，不允许普通reply冒充分享豁免。保持comment既有fingerprint兼容（DM显式kind分支），不得破坏Task2已审接口。
+4. search 增加真实 order 选择、参数校验和CLI接线；收藏夹可选 ID 接入现有 fav 的 dry/go 选夹流程，保留默认选择及原发送红线。配置/UI/实际调用一致；不新增投稿/批量发送。
+5. 先针对失败测试，再最小实现；覆盖配置保存/缺省/升级、真实CLI请求参数、真实scheduler prompt和通知过滤、取消乱序。运行focused迭代，提交前一次全 npm test、受改JS语法与diff检查。无新增重依赖。报告明确哪些设置仅agent预算、哪些代码强制，真实宿主仍未验证。
+
+### Task 5: 原只读聚合能力差集
+
+以scroll vendor/bilibili-mcp/mcp_server.py原公开函数为参考，补齐可轻量接入现有Node CLI的只读聚合：热门视频、热词图鉴（不是搜索热搜）、每周必看（列表/指定期）、排行、用户信息/投稿、远端收藏夹/内容、未读/回复/@和赞。先盘点现有命令避免重复，CLI有清楚帮助/参数与scope只读注册，错误不能伪成功。相关B站请求route/参数只用本项目现有代码或原依赖的实际API定义为依据，不凭记忆猜；可读公开上游源码，禁止使用真人cookie或发起登录接口验收。
+
+controller已核对原依赖固定发布wheel和SHA256，具体路径/参数与来源见 .superpowers/sdd/acceptance-plan-20261022/readonly-api-sources.md，Task5先读该文件，不必重复下载。原scroll的hot_buzzwords实际是热词图鉴，界面/报告准确命名，不能冒称搜索热搜榜；若搜索热搜未实现，差异中单独说明。原库rank day只对PGC生效，V2分类不要把day当真实有效参数。旧原库/接口定义不代表当前在线可用。
+
+视频分区数据若没有可靠当前来源，不复制过时上传分区表冒充当前数据；明确未支持原因。视频弹幕已有video命令读取则标复用不再造。保留现有JSON/文本惯例，用一个职责清楚模块批量处理同形只读请求，不引入Python/uv/MCP或泛化框架。接口结果只代表模拟协议通过，不能声称在线可用。
+
+本次盘点还发现直接CLI产出绕过：tools/commands/subtitles.mjs:99-104 无条件写字幕json/txt/plain；tools/diagnostics/fetch-covers.mjs:9,18 无条件建目录并写封面。Task5顺手补这两个已确认实际入口的产出开关，沿Task3同一artifacts.enabled：关闭时只返回内存/标准输出文字，不创建产出目录、不请求仅为落盘的封面、不删除既有文件；开启时保留可选写出，测试输出必须临时目录，不能污染repo/真实用户目录。补行为红绿回归，不扩展到日记/账本/凭据等明确需要的状态。核对原bili_crawl对应现有search/comments/video/debrief可组合能力，未有一条批量命令就准确注明组合方式/差异，不拿单视频命令冒称完整批采。
+
+TDD通过真实CLI及假fetch：参数透传、分页/排序、API错误和未知网络阻断；fake用户目录，先红后绿；一次全套/语法/diff检查后提交。报告 task-5-report.md，列每个scroll能力的CLI对应、剩余差异及理由。不要改controller计划或最终验收报告；不新增任何对外写能力/下载/付费/真实账号操作，不派子代理。
+
+本审查分支交付版本定为0.5.1（原安装/基线为0.5.0），更新实际包版本及必要一致性引用，不发布npm/市场、不改真实安装；便于区分将来加载的修复包与原版。最终测试和报告记录精确提交，不以版本号代替SHA。
+
+### Task 6: 能力差集与完整验收交付
 
 核对原始GitHub上游和共同祖先、公开性、准确提交；对照scroll/whale真实代码形成17项矩阵与差异。独立审查本分支，运行相关测试，提交推送独立分支，不合并、不覆盖安装。最终记录修复与未实现/无法验证项，满足完成条件才取消并核实小时调度。
 
