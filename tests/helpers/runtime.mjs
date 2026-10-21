@@ -5,7 +5,7 @@ import cp from 'node:child_process'
 import { syncBuiltinESMExports } from 'node:module'
 import { Readable } from 'node:stream'
 const scenario = process.env.TEST_RUNTIME_CASE
-const realDate = Date, now = new Date('2026-10-22T02:30:00').getTime()
+const realDate = Date, now = new Date(scenario === 'tide-double-listen' ? '2026-10-22T22:30:00' : '2026-10-22T02:30:00').getTime()
 globalThis.Date = class extends realDate { constructor(...a) { super(...(a.length ? a : [now])) } static now() { return now } }
 const timers = []
 globalThis.setTimeout = globalThis.setInterval = fn => { const t = {fn}; timers.push(t); return t }
@@ -91,8 +91,9 @@ if(scenario==='session') {
   assert.equal(events.some(([e])=>e==='round:delivered'),false)
   assert.equal(JSON.parse(fs.readFileSync(path.join(dsh,'pod-night.json'))).fired,false)
 } else {
-  config.listen={comment:scenario!=='stop-dm',dm:scenario==='stop-dm',allDay:scenario!=='tide-listen',scope:'reply'}
+  config.listen={comment:scenario!=='stop-dm',dm:scenario==='stop-dm',allDay:!['tide-listen','tide-double-listen'].includes(scenario),scope:'reply'}
   config.night={mode:'tide',windows:[{start:'12:00',end:'13:00',wakes:1}],tide:{activeStart:'22:00',activeEnd:'06:00',peakStart:'23:00',peakEnd:'01:00',valleyStart:'02:00',valleyEnd:'03:00'}}
+  if(scenario==='tide-double-listen') config.night.tide={activeStart:'00:00',activeEnd:'23:00',peakStart:'22:00',peakEnd:'02:00',wakesPeak:1,wakesValley:0}
   fs.writeFileSync(process.env.BILI_POD_CONFIG,JSON.stringify(config))
   fs.writeFileSync(path.join(dsh,'pod-listen.json'),JSON.stringify({lastSeen:Math.floor(now/1000)-100}))
   if(scenario==='stop-dm') {

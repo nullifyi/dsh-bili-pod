@@ -7,7 +7,8 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { PodHost } from '../lib/extensions.mjs'
 import { scopeFor, checkCommand } from '../lib/scope.mjs'
-import { tideWindows } from '../lib/tide.mjs'
+import { tideWindows, applyTide } from '../lib/tide.mjs'
+import { makePlan, completePlan, inWindow, maxWakes } from '../tools/lib/night-plan.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 function sandbox(t, config = {}) {
@@ -38,6 +39,21 @@ test('automatic DM sharing is granted only when enabled; stale scopes deny write
 test('midnight active range preserves post-midnight valley and crossing peak', () => {
   const wins = tideWindows({ activeStart: '22:00', activeEnd: '06:00', peakStart: '23:00', peakEnd: '01:00', valleyStart: '02:00', valleyEnd: '03:00', extraStart: '10:00', extraEnd: '11:00', wakesExtra: 1 })
   assert.deepEqual(wins.map(w => [w.start, w.end]).sort(), [['02:00','03:00'], ['23:00','01:00']])
+})
+test('split tide segments plan both wakes within the original quota and keep zero-budget listening', () => {
+  const tide = { activeStart:'00:00', activeEnd:'23:00', peakStart:'22:00', peakEnd:'02:00', wakesPeak:2, wakesValley:0, skipPeak:0 }
+  const cfg = applyTide({ mode:'tide', tide }), now = new Date('2026-10-22T00:30:00').getTime()
+  assert.equal(maxWakes(cfg), 2)
+  const early = makePlan(cfg, {}, now, () => 0)
+  assert.equal(early.window, '00:00–02:00')
+  const late = makePlan(cfg, completePlan(early, early.atMs), now, () => 0)
+  assert.equal(late.window, '22:00–23:00')
+  const completed = completePlan(late, late.atMs)
+  assert.equal(completed.wakes, 2)
+  assert.equal(makePlan(cfg, completed, late.atMs, () => 0).action, 'done')
+  const single = applyTide({ mode:'tide', tide:{...tide, wakesPeak:1} })
+  assert.equal(maxWakes(single), 1)
+  assert.equal(inWindow(single, new Date('2026-10-22T22:30:00').getTime()), true)
 })
 test('automatic DM scope still requires the configured owner and mutual following in the actual CLI', t => {
   const cfg={share:{enabled:true,via:'dm'},owner:{mid:'222',name:'Owner'}}
@@ -107,7 +123,7 @@ test('late timed-out disposer cannot remove a replacement instance registrations
   await h.close();assert.equal(fs.readFileSync(trace,'utf8'),'oldticknew')
 })
 
-for (const scenario of ['session', 'create-failure', 'prompt-failure', 'not-accepted', 'scope-failure', 'stop-listen', 'stop-dm', 'tide-listen', 'plugin-lifecycle']) {
+for (const scenario of ['session', 'create-failure', 'prompt-failure', 'not-accepted', 'scope-failure', 'stop-listen', 'stop-dm', 'tide-listen', 'tide-double-listen', 'plugin-lifecycle']) {
   test(`runtime boundary: ${scenario}`, t => {
     const env = sandbox(t); env.TEST_RUNTIME_CASE = scenario
     const r = run(env, 'tests/helpers/runtime.mjs'); assert.equal(r.status, 0, r.stderr + r.stdout)

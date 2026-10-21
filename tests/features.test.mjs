@@ -75,6 +75,14 @@ test('tide windows are clipped to the active range', async () => {
   assert.equal(wins[0].end, '22:00')
 })
 
+test('tide keeps both clipped segments without multiplying the original wake budget', async () => {
+  const { tideWindows } = await import('../lib/tide.mjs')
+  for (const [wakesPeak, expected] of [[1, [1, 0]], [2, [1, 1]], [3, [2, 1]]]) {
+    const wins = tideWindows({ activeStart: '00:00', activeEnd: '23:00', peakStart: '22:00', peakEnd: '02:00', wakesPeak, wakesValley: 0 })
+    assert.deepEqual(wins.map(w => [w.start, w.end, w.wakes]), [['00:00', '02:00', expected[0]], ['22:00', '23:00', expected[1]]])
+  }
+})
+
 // ── 日记文件夹 ──────────────────────────────────────────────────────────────
 test('diary: write, archive, extract records and recall', async (t) => {
   const ds = await import('../lib/diarystore.mjs')
