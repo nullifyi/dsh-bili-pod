@@ -42,11 +42,16 @@
 2. mod 总开关和单项 toggle 真实 reload：禁用移除事件/prompt/routes/commands，启用 setup；setup 返回 disposer 在禁用/重载/卸载时运行；失败/超时 setup 不残留注册。prompt 回调异常只记录该扩展错误，不阻断唤醒。已声明11事件要在真实契约位置触发，或删除不真实的承诺并记录合理未支持原因，不能空接口冒充。
 3. pod.command 在实际 CLI 可执行，仅本地已启用扩展命令，内置命令不可劫持，参数交接清晰；不要持久任意脚本执行接口或伪称是 MCP server。启动/异步 setup 期间卸载后不得启动 scheduler；stop 后已开始的网络读取返回也不得再投递会话。
 4. artifacts.enabled=false 必须覆盖自动 debrief/watch 的封面、字幕、抽帧、视频等持久写出。允许按需要做内存只读摘要；必要临时文件有限且 finally 清理，不写额外产出物、不删除既有用户文件；true 保留现有能力。日记与账本是明确需求，不因此禁掉。测试真实命令写盘而非仅检查默认值。
-5. share.via=dm 在显式启用分享且主人/互粉校验通过时权限可执行，不放宽陌生人 DM 红线。scope 不能将过期自动轮当作手动轮放行写操作；明确这只是命令策略不是系统沙箱。峰谷正确保留跨午夜谷/峰；监听时窗消费 applyTide 同一配置。fixed 默认和关闭能力保持。
-6. TDD，离线模拟会话与网络、临时目录，全部测试/语法/diff检查并提交，task-3-report.md 精确记录证据。
+5. share.via=dm 在显式启用分享且主人/互粉校验通过时权限可执行，不放宽陌生人 DM 红线。scope 不能将过期自动轮当作手动轮放行写操作；自动轮写scope失败不能继续投递并退化成不受限，应用隔离失败回归。明确这只是命令策略不是系统沙箱。峰谷正确保留跨午夜谷/峰；监听时窗消费 applyTide 同一配置。fixed 默认和关闭能力保持。
+6. 已只读核对已安装 DSH 2.0.19-next 的 app.asar 内 dsh-api-session-controller：prompt 返回 accepted 是接收确认，不是 agent 本轮完成；create 返回实际 sessionId，指定已有非空 session 可能改建新会话。实现和回归须遵循原生契约，不吞真实创建失败、不把投递完成冒称工作完成；事件文档区分接收与实际完成，缺乏可靠完成来源时明确未支持，不自己发明宿主 API。保持可复用会话意图并尊重实际返回身份。
+7. TDD，离线模拟会话与网络、临时目录，全部测试/语法/diff检查并提交，task-3-report.md 精确记录证据。
 
 ### Task 4: 能力差集、登录回归与完整验收交付
 
 核对原始GitHub上游和共同祖先、公开性、准确提交；对照scroll/whale真实代码形成17项矩阵与差异。独立审查本分支，运行相关测试，提交推送独立分支，不合并、不覆盖安装。最终记录修复与未实现/无法验证项，满足完成条件才取消并核实小时调度。
 
 扫码须用假网络覆盖 waiting/scanned/expired、会话取消/旧key不能覆盖新凭据、正确保存字段及复用，不回显值；不申请真人扫码。能力清单逐项补全 reportLevel、commentPerRound/replyPerRound、楼中楼开关、DM both、search order、检查更新以及原清单全部条目。可安全实现的轻量差集补齐；ASR/uv/MCP等明确重依赖或新子系统不自动下载安装，记录边界和理由，不伪称已支持。基座设置实际已是原生section，修正文档错误。第14项已用无凭据公开API读取指定视频简介与前8热评，网页读取失败；未声称完整观看视频。第15项API fork=false、merge-base退出1，保留原仓并记录需后续GitHub仓库操作；不得删仓或伪造提交血缘。
+
+能力盘点必须以scroll实际公开函数为底表：bili_search/comments/subtitle/danmaku/video_info/reply/crawl/send_dynamic/upload_video/upload_video_multi/send_opus/video_zones/hot_videos/hot_buzzwords/weekly_hot/rank/user_info/user_videos/favorite_lists/favorite_content/send_message/unread_messages/received_replies/received_at_and_likes，再核对原README的日报/每日额度/关键词/人设工作区/收藏夹/依赖/更新/运行状态等设置。不要说“30条CLI基本重合”而漏掉原只读聚合或投稿功能；未实现应准确列出具体能力、理由和建议，非实际支持的MCP名字/哈希链不能冒充MCP或防篡改。新对外写入能力与重型子系统不得为填矩阵擅自启用；测试不调用真实接口。
+
+差集应纠正语义错误而非照旧清单实施：scroll replyToComments 的描述为仅直接回复自己所发评论的消息，不能未经核实改成楼层深度开关；DM both 是原配置具体投递语义，需读原代码。whale 设置现已是原生section；本人登录态复核只说明当前观察结果，非所有人公开可见；本地可改写哈希链只是完整性线索，不是防篡改保证；mod HTTP路由/CLI命令不自动成为模型MCP工具。
