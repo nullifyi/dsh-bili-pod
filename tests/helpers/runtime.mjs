@@ -22,7 +22,7 @@ globalThis.fetch = async u => {
   assert.match(String(u), /\/x\/msgfeed\/reply/)
   fetchCount++
   if (scenario === 'stop-listen') await new Promise(r => { releaseIO = r })
-  return {json:async()=>({code:0,data:{items:[{id:1,reply_time:Math.floor(now/1000),user:{mid:'222',nickname:'Owner'},item:{}}]}})}
+  return {json:async()=>({code:0,data:{items:[{id:1,reply_time:Math.floor(now/1000),user:{mid:'222',nickname:'Owner'},item:{subject_id:'1',target_id:'9'}}]}})}
 }
 const dsh = process.env.DSH_HOME, work = process.env.BILI_POD_WORK, diary = process.env.BILI_POD_DIARY
 const config = { night: { windows: [{start:'00:00',end:'04:00',wakes:1}],skipChance:0 }, listen: {comment:false,dm:false,live:false}, diary:{push:false}, review:{verify:false} }
@@ -96,6 +96,7 @@ if(scenario==='session') {
   if(scenario==='tide-double-listen') config.night.tide={activeStart:'00:00',activeEnd:'23:00',peakStart:'22:00',peakEnd:'02:00',wakesPeak:1,wakesValley:0}
   fs.writeFileSync(process.env.BILI_POD_CONFIG,JSON.stringify(config))
   fs.writeFileSync(path.join(dsh,'pod-listen.json'),JSON.stringify({lastSeen:Math.floor(now/1000)-100}))
+  fs.writeFileSync(path.join(process.env.HOME,'.bili-ai/pod-sent.json'),JSON.stringify({items:[{rpid:'9',oid:'1'}]}))
   if(scenario==='stop-dm') {
     const job=sched.dmTick();while(!releaseIO)await new Promise(r=>setImmediate(r))
     releaseIO();while(!releaseCreate)await new Promise(r=>setImmediate(r))

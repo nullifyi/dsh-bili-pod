@@ -13,7 +13,7 @@
 //   ⑤ 先 --dry 再 --go（和其它写操作一致）
 import fs from 'node:fs'
 import path from 'node:path'
-import { dshPath } from '../lib/paths.mjs'
+import { config } from '../lib/config.mjs'
 
 
 const HOME = (process.env.USERPROFILE || process.env.HOME || '/')
@@ -21,12 +21,9 @@ const FAV_LOG = path.join(HOME, '.bili-ai', 'favorites.json')
 // 2026-10-21 修（外部审计 #10）：新用户跑 `fav --list` 会因为缺文件直接一脸 ENOENT ✗
 //   改成友好提示：--list 不需要凭据（只读本地账本），其它子命令才要 ✓
 let cred = { sessdata: '', bili_jct: '', buvid3: '' }
-let cfg = {}
+const cfg = config()
 try {
   cred = JSON.parse(fs.readFileSync(path.join(HOME, '.bili-ai', 'credentials.json'), 'utf8'))
-} catch {}
-try {
-  cfg = JSON.parse(fs.readFileSync(dshPath('bili-pod.config.json'), 'utf8'))
 } catch {}
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
 const cookie = `SESSDATA=${cred.sessdata}; bili_jct=${cred.bili_jct}; buvid3=${cred.buvid3 ?? ''}`
@@ -85,7 +82,11 @@ async function defaultFavId() {
   const r = await fetch(`https://api.bilibili.com/x/v3/fav/folder/created/list-all?up_mid=${selfMid}`, { headers: H })
   const j = await r.json()
   const list = j.data?.list ?? []
-  const pick = list.find((f) => /默认/.test(f.title)) ?? list[0]
+  if (j.code !== 0) throw new Error('读取收藏夹失败')
+  const requested = opt.folder ?? cfg.favFolderId
+  if (requested && !/^[1-9]\d*$/.test(String(requested))) throw new Error('收藏夹 ID 应为正整数字符串')
+  const pick = requested ? list.find(f => String(f.id) === String(requested)) : list.find((f) => /默认/.test(f.title)) ?? list[0]
+  if (requested && !pick) throw new Error('选择的收藏夹不存在或不属于当前账号')
   if (!pick) throw new Error('这个号还没有任何收藏夹（B站默认会建一个"默认收藏夹"，没有就得先在网页上收藏一次）')
   return { id: pick.id, title: pick.title }
 }

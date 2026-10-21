@@ -86,7 +86,6 @@ const POSITIONAL_SPEC = {
   'check-mention': ['dyn', 'mid', 'name'],
   'watch-video': ['bvid', 'grid', 'outDir'],
   'dynamic-edit': ['dyn', 'textFile'],
-  search: ['kw', 'page'],
   video: ['bvid'],
   'records': [],
   'ledger': [],

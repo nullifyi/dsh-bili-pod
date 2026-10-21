@@ -47,6 +47,18 @@
 - **记账**：每轮醒来、跳过、监听回复、复核结果都进账本（人可读 Markdown + 哈希链）
 - **克制**：撞到风控（验证码 / 限流 / 判刷屏）立刻停手并报告你
 
+### 运行设置与回复审核
+
+`reportLevel` 为 `full / brief / off`，只控制可选报告与日记摘要推送；日记、长期记录和账本照常写。`commentPerRound`（0–20）和 `replyPerRound`（1–10）进入唤醒及监听提示，是 agent 的每轮预算，不是强制次数沙箱；0 评论会另外撤销自动轮的评论权限。
+
+新配置的 `replyToComments` 默认关闭。只有旧配置原本明确设置 `listen.comment=true` 且没有新字段时，才迁移为开启；显式新值优先，保存关闭后不会重新迁移。开启后，通知必须直接回复本地已记录的本人 rpid；无法确认归属、间接回复和 @ 通知均跳过，因此旧 `listen.scope=both` 的消费范围会收窄。评论监听总开关仍有效。
+
+公开评论回复与普通私信默认都须在设置页「待审核」批准；私信草稿用 `reply-draft add --kind dm --to <主人UID> --message "…"`。批准绑定目标与正文、只发送一次，结果不明保留 `uncertain`，不得自动重发。关闭 `review.preReview` 后普通私信仍须是配置主人并且互关。这是同用户宿主与 CLI 的交接约束，不阻止同用户任意进程改本地文件。
+
+`share.via` 可选 `comment / dm / both`。`both` 先公开分享，再以成功收据中的 `operationId` 调用 `dm --share --continuation <operationId> --target <同BV> --msg "<原公开正文> https://www.bilibili.com/video/<BV>/" --reason "…" --score 18 --rank 1 --go`。只接受已 `accepted` 且本地记账完整的公开分享，正文、BV、当前主人及互关再次校验；一次续送复用原分享额度及七天记录。普通 `dm --share` 仍受原共享额度/去重闸门；pending、rejected、uncertain 或记账不完整的来源不能续送，续送的 accepted/uncertain 也不能重发。
+
+`search.order` 可选 `totalrank / click / pubdate / dm / stow / scores`，真实 CLI 的 `search --kw "…" --page 1 --order pubdate` 可覆盖设置。`favFolderId` 留空沿用默认收藏夹，`fav <BV> --folder <ID> --reason "…" --dry` / `--go` 可覆盖，只能使用当前账号拥有的收藏夹，原收藏配额与去重保持有效。
+
 ### 它**不会**做什么
 
 - ❌ 给陌生人发私信 / 群发 —— 私信只发给 `owner.mid`，一天锁定 1 个收信人，且必须互关（写死在代码里）

@@ -247,6 +247,7 @@ console.log('\n[go] 发送中…')
 let operationId
 try { operationId = beginSend(draft, { ...approval, required: needsApproval }) }
 catch (e) { console.error('[审核] ' + e.message); process.exit(7) }
+finishSend(operationId, 'sending', { channel: 'comment', share: SHARE, bvid: String(bvid ?? ''), ownerMid: String(config().owner?.mid ?? '') })
 let res, out
 try {
 res = await fetch(url, {
@@ -278,6 +279,7 @@ if (out.code === 0) {
   }
   finishSend(operationId, 'accepted', { rpid: String(rpid), code: 0, accountingStatus: 'pending' })
   console.log(`  ✅ 已发布，评论 rpid=${rpid}`)
+  console.log(`  operationId=${operationId}`)
   let accountingComplete = true
   // 已发送凭据先落盘；后续复核只描述本次观察范围。
   try {

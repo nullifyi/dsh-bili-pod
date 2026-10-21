@@ -29,7 +29,8 @@ export function gate({ type, target = '', auto = true, share = false }) {
 }
 
 /** 发成功之后记账（失败也算失败，不该记账） */
-export function record({ type, target = '', note = '', auto = true, share = false }) {
-  const r = run(['record', '--type', type, '--target', target, '--note', String(note).slice(0, 40), ...(share ? ['--share'] : auto ? ['--auto'] : [])])
+export function record({ type, target = '', note = '', auto = true, share = false, operationId = '' }) {
+  const r = run(['record', '--type', type, '--target', target, '--note', String(note).slice(0, 40), ...(operationId ? ['--operation-id', operationId] : []), ...(share ? ['--share'] : auto ? ['--auto'] : [])])
   console.log(`[限额闸] ${r.out}`)
+  return r
 }

@@ -46,6 +46,7 @@ export async function pullFeed(kind, { headers, pages = 1 }) {
         oid: String(it.item?.subject_id ?? ''),
         root: String(it.item?.root_id ?? ''),
         parent: String(it.item?.source_id ?? ''),
+        targetId: String(it.item?.target_id ?? ''),
         uri: String(it.item?.uri ?? ''),
       })
     }

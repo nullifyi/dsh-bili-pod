@@ -3,9 +3,18 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 
-const kw = process.argv[2]
-const page = Number(process.argv[3] ?? 1)
-if (!kw) { console.error('用法: node search.mjs <关键词> [页码]'); process.exit(2) }
+import { config } from '../lib/config.mjs'
+const args = process.argv.slice(2), positional = [], opts = {}
+for (let i = 0; i < args.length; i++) {
+  if (args[i].startsWith('--')) opts[args[i].slice(2)] = args[i + 1] && !args[i + 1].startsWith('--') ? args[++i] : true
+  else positional.push(args[i])
+}
+const kw = opts.kw ?? positional[0]
+const page = Number(opts.page ?? positional[1] ?? 1)
+const order = opts.order ?? config().search?.order ?? 'totalrank'
+if (typeof kw !== 'string' || !kw.trim() || !Number.isInteger(page) || page < 1 || !['totalrank','click','pubdate','dm','stow','scores'].includes(order) || Object.keys(opts).some(k => !['kw','page','order'].includes(k))) {
+  console.error('用法: search <关键词> [正整数页码] [--order totalrank|click|pubdate|dm|stow|scores]'); process.exit(2)
+}
 
 const cred = JSON.parse(fs.readFileSync(path.join((process.env.USERPROFILE || process.env.HOME || '/'), '.bili-ai', 'credentials.json'), 'utf8'))
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
@@ -27,7 +36,7 @@ function wbi(params) {
   return `${q}&w_rid=${crypto.createHash('md5').update(q + mixin).digest('hex')}`
 }
 
-const qs = wbi({ search_type: 'video', keyword: kw, page })
+const qs = wbi({ search_type: 'video', keyword: kw, page, order })
 const d = await jget(`https://api.bilibili.com/x/web-interface/wbi/search/type?${qs}`)
 const list = d.data?.result ?? d.data?.results ?? []
 console.log(`搜索「${kw}」 page=${page}  code=${d.code} ${d.message ?? ''}  结果数=${list.length}`)

@@ -20,6 +20,7 @@ import { execFile } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { NODE_EXE } from '../lib/nodebin.mjs'   // 2026-10-21：别用 process.execPath（Electron 里它是主程序 ✗）
 import { withFileLock, readJson, atomicJson } from '../../lib/file-state.mjs'
+import { config } from '../lib/config.mjs'
 
 const HOME = process.env.USERPROFILE || process.env.HOME || '.'
 const FILE = path.join(HOME, '.bili-ai', 'pending-replies.json')
@@ -41,19 +42,23 @@ if (cmd === 'add') {
   const { oid, bvid, root, who, message, src, referer } = opt
   const parent = opt.parent || root
   const type = String(opt.type || '1')
-  if (!oid || !message) { console.error('需要 --oid 和 --message'); process.exit(2) }
-  if (!root) { console.error('回复要有 --root（省略 parent 时回复该根评论）'); process.exit(2) }
+  const kind = opt.kind ?? 'comment', to = String(opt.to ?? '')
+  if (!['comment', 'dm'].includes(kind)) { console.error('kind 只支持 comment/dm'); process.exit(2) }
+  if (kind === 'dm' && (!to || to !== String(config().owner?.mid ?? ''))) { console.error('私信草稿只能绑定当前配置的主人 UID'); process.exit(2) }
+  if ((kind === 'comment' && !oid) || !message) { console.error('需要 --message（评论还需 --oid）'); process.exit(2) }
+  if (kind === 'comment' && !root) { console.error('回复要有 --root（省略 parent 时回复该根评论）'); process.exit(2) }
   const text = String(message).trim()
-  if (text.length > 500) { console.error('草稿太长（>500），砍短'); process.exit(2) }
+  if (!text || text.length > (kind === 'dm' ? 300 : 500)) { console.error('草稿为空或太长，砍短'); process.exit(2) }
   const item = withFileLock(FILE, () => {
     const db = load()
-    if (db.items.some(x => String(x.oid) === String(oid) && String(x.type || '1') === type && String(x.parent) === String(parent))) return null
+    if (db.items.some(x => kind === 'dm' ? x.kind === 'dm' && x.to === to && x.message === text : x.kind !== 'dm' && String(x.oid) === String(oid) && String(x.type || '1') === type && String(x.parent) === String(parent))) return null
     const value = {
     id: crypto.randomBytes(4).toString('hex'),
     at: new Date().toISOString(),
     oid: String(oid), type, referer: referer ? String(referer) : '', bvid: bvid ? String(bvid) : '', root: String(root), parent: String(parent),
     who: who ? String(who) : '', src: src ? String(src).slice(0, 300) : '',
     message: text,
+    ...(kind === 'dm' ? {kind: 'dm', to} : {}),
     }
     db.items.push(value)
     atomicJson(FILE, db)

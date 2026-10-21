@@ -17,6 +17,7 @@ import crypto from 'node:crypto'
 import { config } from '../lib/config.mjs'
 import { validateShare } from '../lib/share-policy.mjs'
 import { gate, record } from '../lib/quota-gate.mjs'
+import { coordinates, checkApproval, beginSend, finishSend, claimShareContinuation, finishShareContinuation } from '../../lib/comment-state.mjs'
 
 const argv = process.argv.slice(2)
 const opt = {}
@@ -37,6 +38,8 @@ const DRY = !!opt.dry
 const GO = !!opt.go
 const STATUS = !!opt.status
 const MSG = String(opt.msg ?? '').trim()
+const CONTINUATION = typeof opt.continuation === 'string' ? opt.continuation : ''
+if (opt.continuation && (!CONTINUATION || !SHARE)) { console.error('续送必须给 --share --continuation <operationId>'); process.exit(2) }
 if (SHARE && !STATUS) {
   try { validateShare(config(), opt) } catch (e) { console.error(e.message); process.exit(2) }
 }
@@ -66,6 +69,13 @@ if (!looksLikeJct(cred.bili_jct)) {
 const cfg = config()
 const OWNER = String(cfg.owner?.mid ?? '').trim()
 const OWNER_NAME = String(cfg.owner?.name ?? '主人')
+if (opt.to && String(opt.to) !== OWNER) { console.error('私信目标必须是当前配置主人'); process.exit(7) }
+const draft = coordinates({ kind: 'dm', to: OWNER, message: MSG })
+const approval = { operationId: opt['operation-id'], token: opt.approval }
+const needsApproval = !SHARE && cfg.review?.preReview !== false
+if (GO && (needsApproval || approval.token) && !checkApproval(draft, approval)) {
+  console.error('[审核] 普通私信回复需要绑定主人与正文的一次性宿主批准；--reviewed 不能代替审核。'); process.exit(7)
+}
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
 const H = {
@@ -84,8 +94,16 @@ const ONLY_TO = OWNER            // ② 只发给主人
 const REQUIRE_MUTUAL = true      // ③ 必须互关
 // 分享型的 target：优先正文里的 BV（"同一视频 7 天一次"才判得准 ✓），否则退回 dm:<mid>
 const targetBV = BV || (String(opt.target ?? "").match(/^(?:BV:)?(BV[0-9A-Za-z]{10})$/) ?? [])[1]
+if (opt.target && (!/^(?:BV:)?BV[0-9A-Za-z]{10}$/.test(String(opt.target)) || BV && String(opt.target).replace(/^BV:/,'') !== BV)) {
+  console.error('显式 --target 必须是有效且与正文一致的 BV'); process.exit(2)
+}
 if (SHARE && !STATUS && !targetBV) { console.error("分享需要正文或 --target 中的有效 BV 号"); process.exit(2) }
 const SHARE_TARGET = targetBV ? "BV:" + targetBV : "dm:" + ONLY_TO
+const continuationDetails = { ownerMid: OWNER, bvid: targetBV, message: MSG }
+if (CONTINUATION) {
+  try { claimShareContinuation(CONTINUATION, continuationDetails, { claim: false }) }
+  catch(e) { console.error('[续送] ' + e.message); process.exit(7) }
+}
 
 async function me() {
   const nav = await jget('https://api.bilibili.com/x/web-interface/nav')
@@ -111,6 +129,7 @@ async function send(toMid, text) {
   body.set('msg[content]', JSON.stringify({ content: text }))
   body.set('csrf', String(cred.bili_jct))
   const r = await fetch('https://api.vc.bilibili.com/web_im/v1/web_im/send_msg', {
+    signal: AbortSignal.timeout(15000),
     method: 'POST',
     headers: { ...H, 'content-type': 'application/x-www-form-urlencoded' },
     body: body.toString(),
@@ -165,16 +184,38 @@ if (DRY) { console.log('  [dry] 未发送 ✓ 确认后把 --dry 换成 --go'); 
 if (!GO) { console.error('✗ 必须给 --dry 或 --go'); process.exit(2) }
 
 // ④ 分享型先过闸（日上限 / 同一视频 7 天一次 / 评分卡 …由 quota 统一管 ✓）
-if (SHARE) {
+if (SHARE && !CONTINUATION) {
   const ok = gate({ type: 'dm', target: SHARE_TARGET, auto: true, share: true })
   if (!ok) { console.error('✗ 分享额度不允许（见上面的 [限额闸] 输出）'); process.exit(4) }
 }
-const r = await send(ONLY_TO, MSG)
-if (r.code === 0) {
-  saveQ({ date: today(), count: used + 1, mid: ONLY_TO, at: new Date().toISOString() })
-  if (SHARE) record({ type: 'dm', target: SHARE_TARGET, note: MSG.slice(0, 40), auto: true, share: true })
-  console.log(`  ✓ 已发送（HTTP ${r.http}）${SHARE ? ' · 已记入分享额度 ✓' : ' · 推送不占额度 ✓'}`)
+let operationId
+try {
+  if (CONTINUATION) claimShareContinuation(CONTINUATION, continuationDetails)
+  else {
+    operationId = beginSend(draft, { ...approval, required: needsApproval })
+    finishSend(operationId, 'sending', { channel: 'dm', share: SHARE, bvid: targetBV ?? '' })
+  }
+} catch(e) { console.error('[审核/续送] ' + e.message); process.exit(7) }
+const finish = (status, details) => CONTINUATION ? finishShareContinuation(CONTINUATION, status, details) : finishSend(operationId, status, details)
+let r
+try { r = await send(ONLY_TO, MSG) }
+catch(e) { finish('uncertain', {reason: String(e.message).slice(0,200)}); console.error('发送结果不明，请人工核对，勿重发'); process.exit(8) }
+if (r.http >= 200 && r.http < 300 && r.code === 0) {
+  finish('accepted', { code: 0, accountingStatus: 'pending' })
+  let complete = true
+  try {
+    saveQ({ date: today(), count: used + 1, mid: ONLY_TO, at: new Date().toISOString() })
+    if (SHARE && !CONTINUATION) complete = record({ type: 'dm', target: SHARE_TARGET, note: MSG.slice(0, 40), auto: true, share: true, operationId }).code === 0
+  } catch { complete = false }
+  if (CONTINUATION) {
+    // Accepted stays final even if the optional local DM counter cannot be saved.
+    console.log(`  ✓ 已发送（HTTP ${r.http}） · 复用原分享额度，不重复计账${complete ? '' : '；本地DM计数未完成，勿重发'}`)
+  } else {
+    finish('accepted', { accountingStatus: complete ? 'complete' : 'incomplete' })
+    console.log(`  ✓ 已发送（HTTP ${r.http}）${SHARE ? ' · 已记入分享额度 ✓' : ' · 回复不占分享额度 ✓'}${complete ? '' : '；本地记账未完成，勿重发'}`)
+  }
   process.exit(0)
 }
+finish(typeof r.code === 'number' && r.code !== 0 ? 'rejected' : 'uncertain', { code: r.code ?? null, reason: String(r.message ?? '') })
 console.error(`  ✗ 发送失败：HTTP ${r.http} ${explainCode(r.code)}${r.message ? `（B站原文：${r.message}）` : ''}`)
 process.exit(1)
