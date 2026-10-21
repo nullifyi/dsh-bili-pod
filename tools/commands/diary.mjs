@@ -22,7 +22,7 @@ import path from 'node:path'
 import { diaryDir, dshPath } from '../lib/paths.mjs'
 import { config } from '../lib/config.mjs'
 import {
-  layout, ensureLayout, summary, appendDaily, archiveDue, recall, rebuildIndex, normalizeKind, DEFAULT_KINDS, dayKey,
+  layout, ensureLayout, summary, appendDaily, archiveDue, recall, rebuildIndex, normalizeKind, validateKind, DEFAULT_KINDS, dayKey,
 } from '../../lib/diarystore.mjs'
 
 const argv = process.argv.slice(2)
@@ -97,7 +97,7 @@ if (sub === 'add') {
   const day = String(get('day', dayKey()))
   let line = text.trim()
   if (which === 'self') {
-    const k = normalizeKind(kindRaw, kinds) || '想说的'
+    const k = validateKind(normalizeKind(kindRaw, kinds) || '想说的')
     line = `- [${k}] ${line}`
   }
   const file = appendDaily(diaryDir, { day, kind: which, text: line })

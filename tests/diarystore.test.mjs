@@ -88,6 +88,39 @@ test('records and diary CLI reject unsafe inputs before writing user content', (
   assert.equal(fs.existsSync(L.indexPath), false)
 })
 
+// Accepting these CLI kinds poisons an otherwise valid diary for future archival.
+test('diary CLI rejects unsafe self categories before changing an existing daily', (t) => {
+  const { dir, root, L } = fixture(t)
+  ds.appendDaily(root, { day: DAY, text: '- [学习] kept text' })
+  const before = textAt(L.daily(DAY))
+  for (const kind of ['../escape', '..\\escape', 'nested/name', 'nested\\name', 'INDEX', 'index']) {
+    const run = spawnSync(process.execPath, ['tools/commands/diary.mjs', 'add', '--kind', kind, '--text', 'rejected text', '--day', DAY], {
+      encoding: 'utf8',
+      env: { ...process.env, HOME: dir, USERPROFILE: dir, DSH_HOME: path.join(dir, 'dsh'), BILI_POD_CONFIG: path.join(dir, 'config.json'), BILI_POD_WORK: path.join(dir, 'work'), BILI_POD_DIARY: root },
+    })
+    assert.notEqual(run.status, 0, kind)
+    assert.match(run.stderr, /分类|kind/i)
+    assert.equal(textAt(L.daily(DAY)), before)
+  }
+  assert.equal(ds.archiveDay(root, DAY).entries, 1)
+  assert.match(textAt(L.record('学习')), /kept text/)
+  assert.doesNotMatch(textAt(L.archive(DAY)), /rejected text/)
+})
+
+test('owner diary CLI preserves prose containing path-like or reserved category words', (t) => {
+  const { dir, root, L } = fixture(t)
+  const text = '给主人的记录含 ../escape、INDEX 和 [..\\escape] 原文'
+  const run = spawnSync(process.execPath, ['tools/commands/diary.mjs', 'add', '--kind', '../escape', '--text', text, '--day', DAY, '--owner'], {
+    encoding: 'utf8',
+    env: { ...process.env, HOME: dir, USERPROFILE: dir, DSH_HOME: path.join(dir, 'dsh'), BILI_POD_CONFIG: path.join(dir, 'config.json'), BILI_POD_WORK: path.join(dir, 'work'), BILI_POD_DIARY: root },
+  })
+  assert.equal(run.status, 0, run.stderr)
+  assert.equal(textAt(L.owner(DAY)), `# ${DAY} · 给主人的日记\n\n${text}\n`)
+  assert.equal(fs.existsSync(L.daily(DAY)), false)
+  assert.equal(ds.archiveDay(root, DAY).entries, 0)
+  assert.equal(textAt(L.ownerArchive(DAY)), `# ${DAY} · 给主人的日记\n\n${text}\n`)
+})
+
 // Moving writeState before the body append falsely consumes this record on retry.
 test('record body append failure can be retried without losing the entry', (t) => {
   const { root, L } = fixture(t)
