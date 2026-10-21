@@ -27,6 +27,10 @@
 **没变的**：一轮怎么跑（`sessionController` 叫醒）、设置页形态（DSH「设置 → 鲸群」）、
 私信三天条限制、分享额度、风控刹车 —— 这些照上游来。
 
+> 与 [dsh-bili-scroll](https://github.com/c1overzz/dsh-bili-scroll) 的三方能力矩阵、以及
+> 「它有而这里没有」的差集清单（含每项为什么没做、以后怎么做、落点在哪个文件），见
+> [docs/CAPABILITY-DIFF.md](docs/CAPABILITY-DIFF.md)。
+
 ---
 
 ## 它能做什么

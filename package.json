@@ -32,7 +32,8 @@
     "CHANGELOG.md",
     "NOTICE.md",
     "examples",
-    "tests"
+    "tests",
+    "docs"
   ],
   "dsh": {
     "bundle": {
