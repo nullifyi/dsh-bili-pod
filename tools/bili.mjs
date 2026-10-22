@@ -45,6 +45,7 @@ const map = {
   tide: ['commands/tide.mjs', '峰谷作息：show 看当前配置 / preview 看今天算出来的窗口'],
   taste: ['commands/taste.mjs', '口味：show / add（她自己加，要写理由）/ signal（主人的感兴趣程度反向调整）/ recent'],
   artifacts: ['commands/artifacts.mjs', '产出物（默认关）：status / save --name x --text … / list / show'],
+  spend: ['commands/spend.mjs', '开销：今天哪件事最费 token（--date / --all / --json / --watch）'],
   notify: ['commands/notify.mjs', '通知分发（后端 stdout/file/webhook/command，由 config.notify 决定）'],
   night: ['commands/pod-night.mjs', '生物钟（旧的 CLI 版）：plan / clock / mark / status —— 插件里由宿主调度，一般不用手动跑'],
   search: ['commands/search.mjs', '按关键词搜视频（WBI 签名）：标题/UP/播放/简介/标签'],

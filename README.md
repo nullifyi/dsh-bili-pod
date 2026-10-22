@@ -241,6 +241,30 @@ node tools/bili.mjs ledger verify        # 断链会列出 expected / actual
 
 ---
 
+## 开销：她一天里哪件事最费 token
+
+这些数字不是估的——DSH 的会话日志里，每个 `assistant/message` 都带 `usage`，每个 `tool/call` 都带工具名和参数。所以“哪一轮、哪件事、花了多少”是能对上的。
+
+```bash
+node tools/bili.mjs spend                       # 今天（只算她自己的会话）
+node tools/bili.mjs spend --date 2026-10-22     # 指定某天
+node tools/bili.mjs spend --days 7              # 近一周，一天一行
+node tools/bili.mjs spend --all                 # 连你自己在同一项目里的会话一起算
+node tools/bili.mjs spend --json
+node tools/bili.mjs spend --watch --interval 60 # 挂着一个小仪表盘，数字变了才打印一行
+```
+
+输出分四块：**合计**（输入 / 缓存读 / 输出）、**按在干什么分组**（醒来一轮、监听回复、私信、弹幕、到点跳过、手动）、**最贵的几轮**（时间 + 轮次 + 步数 + 用到的 B 站命令）、**哪件事最费 token**（按“为决定这件事付出的 token”归因到工具，例如 `ops_bash · debrief`）。
+
+设置页 → 鲸群 → 状态 里有一行当日汇总，下面还有一块「开销（花掉多少 token）」，可以按日期翻、看同样的表格。
+
+几点口径，先说清楚：
+
+- **缓存读最便宜，输出最贵**。她一个 500k token 的上下文里 90% 是缓存读，真正贵的是她“想了多少”（输出）和“新塞进去多少”（非缓存输入）。
+- **¥ 是摊出来的**：宿主 cost-meter 只有“会话 / 天”这一级的金额，所以每轮的钱按 token 占比折算，标了“约”。
+- **归因是估算**：一轮里每一步的 token 记在“这一步调用的工具”上；一步里调了多个工具就平分。
+- 会话日志是**多帧 zstd 拼接**的，普通 `zstdDecompressSync` 只吐第一帧——这个坑写在 `lib/spend.mjs` 顶部，也有测试守着。
+
 ## 产出物（默认关）
 
 设置 → 鲸群 → 产出物：打开后，她可以把「这一轮深读的报告 / 抽帧图」落盘到 `artifacts/`
@@ -328,6 +352,7 @@ node tools/bili.mjs ledger list|show|verify|tail
 node tools/bili.mjs verify [--rpid X]    # 复核发出去的评论
 node tools/bili.mjs tide show|preview    # 看今天的作息窗口
 node tools/bili.mjs taste show           # 口味（含女主人）+ 今天自改次数
+node tools/bili.mjs spend                # 今天哪件事最费 token（--days 7 / --watch）
 node tools/bili.mjs taste add --like "机械键盘" --why "看了三遍拆解"   # 她自己改口味：必须写理由
 node tools/bili.mjs taste signal --bvid BV1xx --level 5               # 你的感兴趣程度 → 反推口味
 node tools/bili.mjs extlist              # 装了哪些 mod
@@ -396,7 +421,7 @@ cd <插件目录>
 npm test
 ```
 
-0.6.0（当前）`npm test` → **172/172 通过，0 失败、0 跳过**，11 个测试文件，覆盖计划器（含同窗 10 分钟间隔）、日记失败恢复、评论/DM 审批及去重、原生会话生命周期、扩展回滚、扫码跨代取消、设置迁移、Windows 文件锁、只读 CLI、产出开关，以及 0.6.0 新增的低价时段 / 女主人 / 口味归一。0.5.1 生产提交 `f1438c11941f82fd730048fb281c836d395d9594` 的报告记录 161/161。完整范围与未验证项见[17 项验收记录](docs/ACCEPTANCE-20261022.md)。
+0.6.1（当前）`npm test` → **177/177 通过，0 失败、0 跳过**，12 个测试文件，覆盖计划器（含同窗 10 分钟间隔）、日记失败恢复、评论/DM 审批及去重、原生会话生命周期、扩展回滚、扫码跨代取消、设置迁移、Windows 文件锁、只读 CLI、产出开关，0.6.0 新增的低价时段 / 女主人 / 口味归一，以及 0.6.1 的开销归因（多帧 zstd 会话日志解析）。0.5.1 生产提交 `f1438c11941f82fd730048fb281c836d395d9594` 的报告记录 161/161。完整范围与未验证项见[17 项验收记录](docs/ACCEPTANCE-20261022.md)。
 
 > 测试用临时目录 + 虚构凭据 + 模拟网络与宿主接口 —— 不登录真实账号，也不发真实消息。
 > 它验证逻辑，不验证「你的 DSH 版本兼容性」与「B 站接口今天是否可用」—— 那两样只能装上去跑。

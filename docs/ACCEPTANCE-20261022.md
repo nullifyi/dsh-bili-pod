@@ -96,9 +96,19 @@ controller 后续须完成本文档独立门禁与最强全分支只读审查，
 
 ## 后续：0.6.0 追加（2026-10-22）
 
-主人提出四项新要求，已在 0.6.0 落地并全量回归：纯 Node、无新依赖，`npm test` → 172/172 通过。
+主人提出四项新要求，已在 0.6.0 落地并全量回归：纯 Node、无新依赖，`npm test` → 177/177 通过。
 
 - 修「设置页 → 消息推送 → 发条测试」失败：类型 `dm` 时 `notify --test` 被发前审核闸拦（`exit 1`）。测试文案现在带 `--test` 跳过审核闸；普通私信仍然必须审核。
 - 新增 `lib/pricing.mjs`（DeepSeek 折扣窗口）与 `night.mode='cheap'`；新增 `tools/commands/taste.mjs`（口味自改 + 兴趣度反推）；新增 `mistress` 配置、`dm --to` 第二收信人、`reply-draft --kind dm`。
 - 这些仍属**本地验证**：真实账号私信/评论、微信/主机通知投递、真实 DSH 重启后的设置页渲染，仍须由主人按「装完立刻跑这一条」与设置页操作确认。
 
+---
+
+## 追加：0.6.1 开销监控（2026-10-22 晚）
+
+主人问「有没有办法看小鲸鱼一天里什么工作花费的 token」。实现为只读监控，不改会话日志：
+
+- `lib/spend.mjs`（多帧 zstd 会话解析 + 轮次/类别/工具归因）、`tools/commands/spend.mjs`（today / --date / --days / --all / --json / --watch）、
+  `tools/bili.mjs` 注册 `spend`（只读，权限单放行）、`/dsh-bili/api/spend`、`/status.spend`、设置页「开销」面板。
+- 口径：缓存读便宜、输出贵；¥ 按宿主 cost-meter 当日合计摊分（估算）；工具归因按步均分。
+- 测试：`tests/spend.test.mjs` 5 例，全量 177/177。
