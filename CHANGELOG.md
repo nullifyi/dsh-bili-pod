@@ -1,3 +1,14 @@
+## v0.5.3（2026-10-22）· 设置页空白修
+
+- **修**：`设置 → 鲸群` 一片空白。扩展字段的 `path` 在宿主内部是数组（好写 `setPath`），
+  但 `/settings` 原样把数组发给设置页，前端 `f.path.split(".")` 抛
+  `TypeError: f.path.split is not a function`，被 DSH 的 slot 错误边界吞掉 → 整个 section 不渲染。
+  现在 `/settings` 的 `extensionFields[].path` 统一是点号字符串（`parts` 另存数组），
+  前端也两种形状都接住；集成测试新增「path 必须是字符串」「扩展字段保存能写进 config」两条断言。
+- 顺带修掉 UI 冒烟测试里扩展字段为空、覆盖不到这条路径的盲区（harness 现在会喂一个真实字段）。
+
+---
+
 ## v0.5.2（2026-10-22）· 同步上游 v0.4.5
 
 上游 `dsh-bili-whale` 从 v0.4.0 走到 v0.4.5（33 个提交 / 56 个文件），这一版把它们当中

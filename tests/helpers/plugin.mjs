@@ -78,6 +78,24 @@ if(process.env.TEST_NO_NODE) {
   assert.ok(Array.isArray(lead.data.rows))
   assert.equal((await request('ledger/verify')).data.ok,true)
 
+  // 2026-10-22 修过的真 bug：扩展字段的 path 是数组，直接发给设置页会炸
+  //   `TypeError: f.path.split is not a function` → 整页空白。
+  const sget=await request('settings',{},'GET')
+  for(const f of sget.data.extensionFields??[]) {
+    assert.equal(typeof f.path,'string','extensionFields[].path 必须是点号字符串')
+    assert.ok(!Array.isArray(f.path))
+    assert.doesNotThrow(()=>f.path.split('.'))
+  }
+  // 扩展字段保存：点号 key 要真的写进 config
+  const sf= (sget.data.extensionFields??[])[0]
+  if(sf) {
+    const sv=await request('settings',{extensionValues:{[sf.path]:'hello-ext'}})
+    assert.equal(sv.status,200)
+    const {readConfig}=await import('../../lib/store.mjs')
+    const got=sf.path.split('.').reduce((o,k)=>o==null?undefined:o[k],readConfig())
+    assert.equal(got,'hello-ext')
+  }
+
   const ext=await request('extensions',{},'GET')
   assert.equal(ext.data.ok,true)
   assert.ok(Array.isArray(ext.data.list))
