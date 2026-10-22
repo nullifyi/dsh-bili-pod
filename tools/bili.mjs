@@ -43,6 +43,7 @@ const map = {
   login: ['commands/login.mjs', '扫码登录：qr 在终端画二维码并轮询 / status 看当前凭据'],
   extlist: ['commands/extlist.mjs', 'mod 扩展：列出目录、已装扩展、注册的命令/路由/字段（不出网）'],
   tide: ['commands/tide.mjs', '峰谷作息：show 看当前配置 / preview 看今天算出来的窗口'],
+  taste: ['commands/taste.mjs', '口味：show / add（她自己加，要写理由）/ signal（主人的感兴趣程度反向调整）/ recent'],
   artifacts: ['commands/artifacts.mjs', '产出物（默认关）：status / save --name x --text … / list / show'],
   notify: ['commands/notify.mjs', '通知分发（后端 stdout/file/webhook/command，由 config.notify 决定）'],
   night: ['commands/pod-night.mjs', '生物钟（旧的 CLI 版）：plan / clock / mark / status —— 插件里由宿主调度，一般不用手动跑'],

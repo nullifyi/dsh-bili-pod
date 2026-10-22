@@ -212,7 +212,80 @@ test('extensions: load a mod, expose field/prompt/route, honour disabled flag', 
   assert.equal(h2.promptText({}), '')
 })
 
-// ── 配置仓库（store）── 放到最后：它会改环境变量 ───────────────────────────
+// ── 低价时段（DeepSeek 折扣窗口）────────────────────────────────────────────
+test('cheap mode: windows come from night.cheap, skip is per-window', async () => {
+  const { normalizeConfig } = await import('../lib/defaults.mjs')
+  const { applyTide } = await import('../lib/tide.mjs')
+  const { config, warns } = normalizeConfig({ night: { mode: 'cheap', cheap: { wakes: 2, skipChance: 0.2 } } })
+  assert.equal(config.night.mode, 'cheap')
+  const night = applyTide(config.night, new Date('2026-10-23T03:00:00'))
+  assert.equal(night.mode, 'cheap')
+  // 低价窗口 + 配置里自定义窗口（默认 20:00–24:00）——「其他时间由自定义完成」
+  assert.equal(night.windows.length, 2)
+  assert.equal(night.windows[0].label, '低价 00:30–08:30')
+  assert.equal(night.windows[0].wakes, 2)
+  assert.equal(night.skipChanceFor(night.windows[0]), 0.2)
+  assert.equal(night.windows[1].label, '自定义 20:00–24:00')
+  assert.equal(night.skipChanceFor(night.windows[1]), 0.3)
+  assert.ok(Array.isArray(warns))
+})
+
+test('cheap mode: isCheapNow / nextCheapAt / describeCheap', async () => {
+  const { normalizeConfig } = await import('../lib/defaults.mjs')
+  const { isCheapNow, nextCheapAt, describeCheap } = await import('../lib/pricing.mjs')
+  const { config } = normalizeConfig({})
+  assert.equal(isCheapNow(config, new Date('2026-10-23T02:00:00')), true)
+  // 02:00Z 在 Asia/Shanghai 是 10:00，当然不是低价时段（窗口按本地时钟读）
+  assert.equal(isCheapNow(config, new Date('2026-10-23T02:00:00Z')), false)
+  assert.equal(isCheapNow(config, new Date('2026-10-23T16:00:00')), false)
+  const next = nextCheapAt(config, new Date('2026-10-23T16:00:00'))
+  assert.ok(next)
+  assert.equal(next.getHours(), 0)
+  assert.equal(next.getMinutes(), 30)
+  assert.match(describeCheap(config), /00:30–08:30/)
+})
+
+test('cheap mode without windows falls back to the DeepSeek discount window', async () => {
+  const { normalizeConfig } = await import('../lib/defaults.mjs')
+  const { applyTide } = await import('../lib/tide.mjs')
+  const { config } = normalizeConfig({ night: { mode: 'cheap', cheap: { windows: [] } } })
+  assert.deepEqual(config.night.cheap.windows, [{ start: '00:30', end: '08:30' }])
+  const night = applyTide(config.night, new Date())
+  assert.ok(night.windows.length >= 1)
+  assert.equal(night.windows[0].label, '低价 00:30–08:30')
+})
+
+// ── 女主人（第二位主人）────────────────────────────────────────────────────
+test('mistress: normalisation, warnings and role separation', async () => {
+  const { normalizeConfig } = await import('../lib/defaults.mjs')
+  const on = normalizeConfig({ owner: { mid: '1', name: '主人' }, mistress: { enabled: true, mid: '2', name: '太太', shareDaily: 9, like: ['狗'] } })
+  assert.equal(on.config.mistress.enabled, true)
+  assert.equal(on.config.mistress.mid, '2')
+  assert.equal(on.config.mistress.shareDaily, 5)
+  assert.deepEqual(on.config.mistress.like, ['狗'])
+  assert.equal(on.config.mistress.title, '女主人')
+  assert.deepEqual(on.warns, [])
+
+  const bad = normalizeConfig({ mistress: { enabled: true, mid: 'abc' } }).warns
+  assert.ok(bad.some((w) => w.includes('女主人')))
+  const same = normalizeConfig({ owner: { mid: '7' }, mistress: { enabled: true, mid: '7' } }).warns
+  assert.ok(same.some((w) => w.includes('一样')))
+  const off = normalizeConfig({ mistress: { enabled: true, mid: '' } }).config
+  assert.equal(off.mistress.mid, '')
+})
+
+test('taste: selfAdjust and learnFromInterest default on, and survive merge', async () => {
+  const { DEFAULTS, normalizeConfig } = await import('../lib/defaults.mjs')
+  assert.equal(DEFAULTS.preferences.selfAdjust, true)
+  assert.equal(DEFAULTS.preferences.learnFromInterest, true)
+  const { config } = normalizeConfig({ preferences: { selfAdjust: false } })
+  assert.equal(config.preferences.selfAdjust, false)
+  assert.equal(config.preferences.learnFromInterest, true)
+  // 默认值必须是拷贝：改一份不能污染 DEFAULTS
+  config.preferences.selfAdjust = true
+  assert.equal(DEFAULTS.preferences.selfAdjust, true)
+})
+
 test('store: creates pod.config.json, imports legacy whale config once', async (t) => {
   const home = tmp(t, 'home')
   const dsh = path.join(home, '.dsh')

@@ -63,6 +63,20 @@ if (SHARE && !STATUS) {
   try { validateShare(config(), opt) } catch (e) { console.error(e.message); process.exit(2) }
 }
 
+// 2026-10-22：收信人先判，再读凭据 —— 免得「填错 mid」被「没凭据」的错误盖住。
+//   只允许：主人 / 已启用且填了 mid 的女主人（两个人必须是两个账号）。
+{
+  const c0 = config()
+  const owners = [String(c0.owner?.mid ?? '').trim()]
+  const m = c0.mistress?.enabled === true && /^\d+$/.test(String(c0.mistress?.mid ?? '')) ? String(c0.mistress.mid) : ''
+  if (m && m !== owners[0]) owners.push(m)
+  const to0 = String(opt.to ?? '').trim()
+  if (to0 && !owners.filter(Boolean).includes(to0)) {
+    console.error('✗ 私信目标只能是主人，或「设置 → 鲸群 → 女主人」里启用并填了 mid 的那个账号')
+    process.exit(7)
+  }
+}
+
 const HOME = process.env.USERPROFILE || process.env.HOME || '.'
 const CRED = path.join(HOME, '.bili-ai', 'credentials.json')
 const QUOTA = path.join(HOME, '.bili-ai', 'dm-quota.json')
@@ -88,13 +102,9 @@ if (!looksLikeJct(cred.bili_jct)) {
 const cfg = config()
 const OWNER = String(cfg.owner?.mid ?? '').trim()
 const OWNER_NAME = String(cfg.owner?.name ?? '主人')
-if (opt.to && String(opt.to) !== OWNER) { console.error('私信目标必须是当前配置主人'); process.exit(7) }
-const draft = coordinates({ kind: 'dm', to: OWNER, message: MSG })
-const approval = { operationId: opt['operation-id'], token: opt.approval }
-const needsApproval = !SHARE && cfg.review?.preReview !== false
-if (GO && (needsApproval || approval.token) && !checkApproval(draft, approval)) {
-  console.error('[审核] 普通私信回复需要绑定主人与正文的一次性宿主批准；--reviewed 不能代替审核。'); process.exit(7)
-}
+// 2026-10-22：目标在下面「写死的三条」里解析（主人，或已启用的女主人）。
+//   · 通知测试（--test）是宿主自己发的一条固定文案，不是陌生人内容 → 不走发前审核
+const TEST = argv.includes('--test')
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
 const H = {
@@ -109,7 +119,20 @@ const today = () => new Date().toLocaleDateString('sv-SE')
 
 // ── 写死的三条 ───────────────────────────────────────────────────────
 const ONE_TARGET_PER_DAY = true  // ① 一天只锁定 1 个收信人（条数不限 ✓）
-const ONLY_TO = OWNER            // ② 只发给主人
+const MISTRESS_MID = cfg.mistress?.enabled === true && /^\d+$/.test(String(cfg.mistress?.mid ?? '')) ? String(cfg.mistress.mid) : ''
+const RECIPIENTS = [OWNER, ...(MISTRESS_MID && MISTRESS_MID !== OWNER ? [MISTRESS_MID] : [])].filter(Boolean)
+const TO_ARG = String(opt.to ?? '').trim()
+let ONLY_TO = OWNER            // ② 默认只发给主人；女主人要显式 --to <她的 mid>
+if (TO_ARG) {
+  if (!RECIPIENTS.includes(TO_ARG)) {
+    console.error('✗ 私信目标只能是主人，或「设置 → 鲸群 → 女主人」里启用并填了 mid 的那个账号')
+    process.exit(7)
+  }
+  ONLY_TO = TO_ARG
+}
+const IS_MISTRESS = ONLY_TO === MISTRESS_MID
+const RECIPIENT_NAME = IS_MISTRESS ? String(cfg.mistress?.name ?? cfg.mistress?.title ?? '女主人') : OWNER_NAME
+const MISTRESS_TITLE = String(cfg.mistress?.title ?? '女主人')
 const REQUIRE_MUTUAL = true      // ③ 必须互关
 // 分享型的 target：优先正文里的 BV（"同一视频 7 天一次"才判得准 ✓），否则退回 dm:<mid>
 const targetBV = BV || (String(opt.target ?? "").match(/^(?:BV:)?(BV[0-9A-Za-z]{10})$/) ?? [])[1]
@@ -122,6 +145,17 @@ const continuationDetails = { ownerMid: OWNER, bvid: targetBV, message: MSG }
 if (CONTINUATION) {
   try { claimShareContinuation(CONTINUATION, continuationDetails, { claim: false }) }
   catch(e) { console.error('[续送] ' + e.message); process.exit(7) }
+}
+
+// 审核凭据（坐标随收信人变）：女主人 → 也要绑她 + 正文；通知测试是宿主固定文案 → 免审
+const draft = coordinates({ kind: 'dm', to: ONLY_TO, message: MSG })
+const approval = { operationId: opt['operation-id'], token: opt.approval }
+const needsApproval = !SHARE && !TEST && cfg.review?.preReview !== false
+if (GO && (needsApproval || approval.token) && !checkApproval(draft, approval)) {
+  console.error(IS_MISTRESS
+    ? `[审核] 给${MISTRESS_TITLE}的私信要先走宿主审核入口（reply-draft add --kind dm），批准后由设置页发送。`
+    : '[审核] 普通私信回复需要绑定主人与正文的一次性宿主批准；--reviewed 不能代替审核。')
+  process.exit(7)
 }
 
 async function me() {
@@ -177,8 +211,8 @@ if (STATUS) {
   const rel = await relation(ONLY_TO)
   const meInfo = await me()
   console.log(`账号: ${meInfo.uname}（mid ${meInfo.mid}）`)
-  console.log(`专属对象: ${OWNER_NAME}（mid ${ONLY_TO || '未配置'}）`)
-  console.log(`今天锁定给: ${lockedToday || '（还没发过）'}${lockedToday && lockedToday !== ONLY_TO ? '  ⚠️ 和当前配置不一致 ✗' : ''}`)
+  console.log(`专属对象: ${OWNER_NAME}（mid ${OWNER || '未配置'}）${MISTRESS_MID ? ` · ${MISTRESS_TITLE}: ${cfg.mistress?.name ?? ''}（mid ${MISTRESS_MID}）` : ''}`)
+  console.log(`今天锁定给: ${lockedToday || '（还没发过）'}${lockedToday && !RECIPIENTS.includes(lockedToday) ? '  ⚠️ 和当前配置不一致 ✗' : ''}`)
   console.log(`今日已发: ${q.date === today() ? Number(q.count ?? 0) : 0} 条（**条数不限** ✓ 只限收信人 ✓）`)
   console.log(`互关状态: attribute=${rel.attribute} ${rel.attribute === 6 ? '（✓ 互关，可以发）' : '（✗ 不是互关，发不出去）'}`)
   for (const line of relationLines(rel, meInfo)) console.log(line)
@@ -210,15 +244,27 @@ if (ONE_TARGET_PER_DAY && q.date === today() && q.mid && String(q.mid) !== ONLY_
   console.error(`✗ 今天已经锁定给 mid ${q.mid} 了 —— 一天只能锁定 1 个收信人（防刷量 ✗）`)
   process.exit(4)
 }
+// 女主人的份额是单独的一本小账：每天 cfg.mistress.shareDaily 条（默认 1），不占主人的分享额度
+const MQ = path.join(HOME, '.bili-ai', 'dm-mistress.json')
+const loadMQ = () => { try { return JSON.parse(fs.readFileSync(MQ, 'utf8')) } catch { return {} } }
+const saveMQ = (o) => { try { fs.mkdirSync(path.dirname(MQ), { recursive: true }); fs.writeFileSync(MQ, JSON.stringify(o, null, 2) + '\n') } catch { /* 记账失败不重发 */ } }
+const mq = loadMQ()
+const mistressUsed = mq.date === today() ? Number(mq.count ?? 0) : 0
+if (IS_MISTRESS && SHARE && !CONTINUATION) {
+  const limit = Math.max(0, Number(cfg.mistress?.shareDaily ?? 1))
+  if (limit <= 0) { console.error(`✗ 女主人每天分享上限是 0 —— 去设置里调大，或者这次别分享`); process.exit(4) }
+  if (mistressUsed >= limit) { console.error(`✗ 今天已经给她分享过 ${mistressUsed} 条（上限 ${limit}）—— 明天再聊 ✓`); process.exit(4) }
+}
 
-console.log(`[dm] ${meInfo.uname} → ${OWNER_NAME}（mid ${ONLY_TO}）`)
+console.log(`[dm] ${meInfo.uname} → ${RECIPIENT_NAME}（mid ${ONLY_TO}）${IS_MISTRESS ? ' · 女主人通道（1 条/天、过审核）' : ''}`)
 console.log(`  正文 ${MSG.length} 字：${MSG.slice(0, 80)}${MSG.length > 80 ? '…' : ''}`)
-console.log(`  互关 ✓  ·  今天第 ${used + 1} 条（条数不限 ✓ 锁定给 ${OWNER_NAME} ✓）`)
+console.log(`  互关 ✓  ·  今天第 ${(IS_MISTRESS ? mistressUsed : used) + 1} 条（条数不限 ✓ 锁定给 ${RECIPIENT_NAME} ✓）`)
 
 if (!GO && !DRY) { console.error('✗ 必须给 --dry 或 --go'); process.exit(2) }
 
 // ④ 分享型先过闸（日上限 / 同一视频 7 天一次 / 评分卡 …由 quota 统一管 ✓）
-if (SHARE && !CONTINUATION) {
+//    女主人的分享走她自己的 1 条/天 小账，不占主人额度，所以不过这本闸
+if (SHARE && !CONTINUATION && !IS_MISTRESS) {
   const ok = gate({ type: 'dm', target: SHARE_TARGET, auto: true, share: true })
   if (!ok) { console.error('✗ 分享额度不允许（见上面的 [限额闸] 输出）'); process.exit(4) }
 }
@@ -239,8 +285,20 @@ if (r.http >= 200 && r.http < 300 && r.code === 0) {
   finish('accepted', { code: 0, accountingStatus: 'pending' })
   let complete = true
   try {
-    saveQ({ date: today(), count: used + 1, mid: ONLY_TO, at: new Date().toISOString() })
-    if (SHARE && !CONTINUATION) complete = record({ type: 'dm', target: SHARE_TARGET, note: MSG.slice(0, 40), auto: true, share: true, operationId }).code === 0
+    if (IS_MISTRESS) {
+      // 女主人的私信单独记账：不占主人的分享额度（她那份上限写在设置里）
+      saveMQ({ date: today(), count: mistressUsed + 1, mid: ONLY_TO, at: new Date().toISOString() })
+      try {
+        fs.appendFileSync(path.join(HOME, '.dsh', 'pod-log.jsonl'), JSON.stringify({
+          at: new Date().toISOString(), kind: 'mistress-share',
+          target: targetBV ? `BV:${targetBV}` : `mid:${ONLY_TO}`,
+          note: MSG.slice(0, 60),
+        }) + '\n')
+      } catch { /* 事件流丢了不影响发送结果 */ }
+    } else {
+      saveQ({ date: today(), count: used + 1, mid: ONLY_TO, at: new Date().toISOString() })
+      if (SHARE && !CONTINUATION) complete = record({ type: 'dm', target: SHARE_TARGET, note: MSG.slice(0, 40), auto: true, share: true, operationId }).code === 0
+    }
   } catch { complete = false }
   if (CONTINUATION) {
     // Accepted stays final even if the optional local DM counter cannot be saved.

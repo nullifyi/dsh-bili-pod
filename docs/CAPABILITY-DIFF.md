@@ -19,6 +19,10 @@
 | 扩展 | 在原结构扩展源码 | MCP/脚本结构 | fields/prompts/commands/routes/11 个实际事件，支持启停/清理/失败回滚；可信 Node 代码，不自动变成 MCP |
 | 通知、直播及既有写能力 | 通知、动态/图文、直播弹幕等 | 部分评论/私信/投稿工具 | 沿 whale；未为凑对照新增投稿、任意 UID 私信或真实互动 |
 
+| 低价时段作息（0.6.0） | 无 | 无（scroll 只有峰谷/中午夜间） | `night.mode=cheap` 把 DeepSeek 折扣窗口（默认北京时间 00:30–08:30）翻成 windows；窗口/次数/跳过率可改，与峰谷共用 makePlan |
+| 口味自调（0.6.0） | 只读配置 | 无 | `taste add` 由她自己加（每天 ≤3、必须写理由、留 taste-log）；`taste signal` 按主人在分享视频上的 1–5 兴趣度反推 |
+| 第二位主人（0.6.0） | 无 | 无 | `mistress`：仅私信分享、每天 ≤5（默认 1）、必经宿主审核、独立配额，提示词要求奉承但不得越权给账号/钱/线下 |
+
 证据入口：[调度与原生会话](../lib/scheduler.js#L227)、[设置 section](../lib/client.js#L984)、[扫码服务](../lib/index.js#L273)、[CLI 权限](../lib/scope.mjs#L83)、[扩展契约](../extensions/README.md)。
 
 ## 原公开工具逐项映射

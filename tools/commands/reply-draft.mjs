@@ -44,7 +44,12 @@ if (cmd === 'add') {
   const type = String(opt.type || '1')
   const kind = opt.kind ?? 'comment', to = String(opt.to ?? '')
   if (!['comment', 'dm'].includes(kind)) { console.error('kind 只支持 comment/dm'); process.exit(2) }
-  if (kind === 'dm' && (!to || to !== String(config().owner?.mid ?? ''))) { console.error('私信草稿只能绑定当前配置的主人 UID'); process.exit(2) }
+  if (kind === 'dm') {
+    const c = config()
+    const mistress = c.mistress?.enabled === true ? String(c.mistress?.mid ?? '') : ''
+    const allowed = [String(c.owner?.mid ?? ''), mistress].filter(Boolean)
+    if (!to || !allowed.includes(to)) { console.error('私信草稿只能绑定当前配置的主人，或已启用的女主人（--to <mid>）'); process.exit(2) }
+  }
   if ((kind === 'comment' && !oid) || !message) { console.error('需要 --message（评论还需 --oid）'); process.exit(2) }
   if (kind === 'comment' && !root) { console.error('回复要有 --root（省略 parent 时回复该根评论）'); process.exit(2) }
   const text = String(message).trim()

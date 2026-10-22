@@ -168,7 +168,9 @@ try {
     const fdO = fs.openSync(outF, 'w'); const fdE = fs.openSync(errF, 'w')
     let r
     try {
-      r = spawnSync(NODE_EXE, [dmPath, '--msg', String(text), '--go'], { stdio: ['ignore', fdO, fdE], timeout: 90000 })
+      // 2026-10-22：设置页「发条测试」走的是宿主固定文案 → 带 --test 免掉「发前审核」
+      //   （以前测试消息会被审核闸 exit 7 拦住，主人看到的就是「测试没成功」✗）
+      r = spawnSync(NODE_EXE, [dmPath, '--msg', String(text), ...(TEST ? ['--test'] : []), '--go'], { stdio: ['ignore', fdO, fdE], timeout: 90000 })
     } finally {
       try { fs.closeSync(fdO) } catch {}
       try { fs.closeSync(fdE) } catch {}
