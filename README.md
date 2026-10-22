@@ -84,6 +84,9 @@ dsh plugin --profile desktop add "link:C:\path\to\dsh-bili-pod"
 # 3) 打开「设置 → 鲸群」
 ```
 
+> 没有 `dsh` 命令（比如装的是桌面安装包）就用插件自带的安装器，效果一样：
+> `node scripts/install.mjs`（`--dry-run` 先看要改什么；卸载用 `node scripts/uninstall.mjs`，不动她的数据）。
+
 **设置页里三件事**：
 
 1. **登录** —— 点「扫码登录」，用要让她用的那个 B 站账号扫一下（二维码就在设置页里）。
@@ -370,6 +373,9 @@ node tools/bili.mjs taste signal --bvid BV1xx --level 5               # 你的�
 node tools/bili.mjs extlist              # 装了哪些 mod
 node tools/bili.mjs artifacts status|save
 node tools/bili.mjs reply-draft list     # 待你审的草稿
+node tools/bili.mjs bundle export --out pod-<日期>.zip   # 存档：代码之外的记忆（默认不含凭据）
+node tools/bili.mjs bundle inspect pod-<日期>.zip        # 验包：逐条 sha256
+node tools/bili.mjs bundle import pod-<日期>.zip         # 搬到新机器后导入（--force 会先备份）
 node tools/bili.mjs comment --oid … --message … --go   # 手动发一条
 ```
 
@@ -388,6 +394,30 @@ node tools/bili.mjs comment --oid … --message … --go   # 手动发一条
 | `<pod-work>/state/` | 她的运行状态：草稿、复核、配额、盯梢、回执、反馈、口味流水、自动额度 | 0.7.0 起统一在这里；首次启动从 `~/.bili-ai` 自动搬（只复制不删，凭据/人设不搬）。旧路径仍可读 |
 | `~/.bili-ai/pending-replies.json` | 旧位置的待审核草稿 | 迁移后实际文件在 `<pod-work>/state/pending-replies.json` |
 | `~/.bili-ai/pod-sent.json` | 旧位置的待复核评论 | 同上 |
+
+> 想把上面这些「她的记忆」整体搬走：`node tools/bili.mjs bundle export`（见 [docs/DEPLOY.md](docs/DEPLOY.md)）。
+
+---
+
+## 搬到另一台电脑 / 备份
+
+**能搬**：代码（GitHub）、配置、日记、账本、运行状态、人设 —— 用 `bundle export` 打成一个 zip。
+**不能搬**：DSH 本体、会话日志、本机补丁（每台机器单独打）；凭据默认不打包，到了新机器扫一次码。
+
+```bash
+# 旧机器
+node tools/bili.mjs bundle export --out pod-2026-10-23.zip
+# 新机器：装 DSH → git clone → 挂进配置档 → 导入 → 重启 → 扫码 → 体检
+node scripts/install.mjs
+node tools/bili.mjs bundle import pod-2026-10-23.zip
+node tools/bili.mjs deps
+```
+
+包内逐条 sha256，导入前全量校验；目标已有数据默认拒绝覆盖（`--force` 会先备份成 `.bak-<时间>`）。
+
+**两台机器别同时跑同一个 B 站账号**：调度、配额、待审草稿都是各算各的，同一晚会醒两轮、评论/私信翻倍，B 站还可能风控。规则是：同一时间只有一台"值班"。
+
+云同步怎么选、坚果云为什么不能直接同步 `~/.dsh`、完整步骤与验证清单，见 **[docs/DEPLOY.md](docs/DEPLOY.md)**。
 
 ---
 
@@ -433,7 +463,7 @@ cd <插件目录>
 npm test
 ```
 
-0.7.0（当前）`npm test` → **189/189 通过，0 失败、0 跳过**，13 个测试文件，覆盖计划器（含同窗 10 分钟间隔）、日记失败恢复、评论/DM 审批及去重、原生会话生命周期、扩展回滚、扫码跨代取消、设置迁移、Windows 文件锁、只读 CLI、产出开关，0.6.0 新增的低价时段 / 女主人 / 口味归一，0.6.1 的开销归因（多帧 zstd 会话日志解析），0.6.3 的窗口内均匀分片，以及 0.7.0 的四档审核 / 静音时段 / 私人信正文构造 / 自动额度与状态迁移。0.5.1 生产提交 `f1438c11941f82fd730048fb281c836d395d9594` 的报告记录 161/161。完整范围与未验证项见[17 项验收记录](docs/ACCEPTANCE-20261022.md)。
+0.7.2（当前）`npm test` → **198/198 通过，0 失败、0 跳过**，14 个测试文件，覆盖计划器（含同窗 10 分钟间隔）、日记失败恢复、评论/DM 审批及去重、原生会话生命周期、扩展回滚、扫码跨代取消、设置迁移、Windows 文件锁、只读 CLI、产出开关，0.6.0 新增的低价时段 / 女主人 / 口味归一，0.6.1 的开销归因（多帧 zstd 会话日志解析），0.6.3 的窗口内均匀分片，0.7.0 的四档审核 / 静音时段 / 私信正文构造 / 自动额度与状态迁移，以及 0.7.2 的存档包（ZIP 往返、篡改检测、导入不覆盖）。0.5.1 生产提交 `f1438c11941f82fd730048fb281c836d395d9594` 的报告记录 161/161。完整范围与未验证项见[17 项验收记录](docs/ACCEPTANCE-20261022.md)。
 
 > 测试用临时目录 + 虚构凭据 + 模拟网络与宿主接口 —— 不登录真实账号，也不发真实消息。
 > 它验证逻辑，不验证「你的 DSH 版本兼容性」与「B 站接口今天是否可用」—— 那两样只能装上去跑。

@@ -1,3 +1,21 @@
+## 0.7.2 — 2026-10-23
+
+可搬家：把「她的记忆」打包带走，装到另一台电脑上是三步（clone → install → import）。
+
+### 新增
+- `bundle` 命令：`export`（默认不含凭据）/ `inspect`（逐条 sha256 校验）/ `import`（目标已存在默认拒绝，`--force` 先备份成 `.bak-<时间>`）。
+- 包格式：`manifest.json` + `config/` + `data/pod-diary/` + `data/pod-work/`（state/rounds/artifacts/extensions）+ `home/persona.md`；`--with-credentials` 才带凭据，`--with-plugin` 才带源码。
+- 自带最小 ZIP 读写（`lib/zip.mjs`，store 模式、零依赖、带 CRC 校验），生成的包任何解压软件都能打开。
+- `scripts/install.mjs` / `scripts/uninstall.mjs`：没有 `dsh` 命令时直接改配置档 `package.json` + `bundles` + 建 `node_modules` 链接；`--dry-run` 可预演。
+- `docs/DEPLOY.md`：能搬什么、搬家步骤、验证清单、云同步怎么选、为什么别用坚果云直接同步 `~/.dsh`、双机同时跑的风险。
+
+### 修
+- `tests/spend.test.mjs` 的时钟改成固定时间：原来跟着 `Date.now()` 跑，跨零点那几分钟第 1 轮会落到「昨天」，测试半夜随机变红。
+
+### 测试
+- 新增 `tests/bundle.test.mjs` 9 例（ZIP 往返、排除缓存/日志、凭据默认不进包、导入拒绝覆盖、`--force` 备份、篡改检测、符号链接跳过）。
+- 全量 198/198 通过。
+
 ## 0.7.1 — 2026-10-22
 
 - 女主人私信分两类：

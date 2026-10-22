@@ -19,7 +19,9 @@ process.env.HOME = HOME
 
 const spend = await import('../lib/spend.mjs')
 
-const now = Date.now()
+// 固定一个「正午」的时间点：如果跟着 Date.now() 跑，跨零点的几分钟里
+// 第 1 轮会落到「昨天」，按今天过滤就只剩 2 轮 —— 测试会在半夜随机变红。
+const now = new Date('2026-10-22T12:00:00+08:00').getTime()
 const day = new Date(now).toLocaleDateString('sv-SE')
 const ev = (type, data, seq, time) => ({ type, seq, time, data })
 
