@@ -75,6 +75,8 @@ TDD通过真实CLI及假fetch：参数透传、分页/排序、API错误和未�
 
 核对原始GitHub上游和共同祖先、公开性、准确提交；对照scroll/whale真实代码形成17项矩阵与差异。独立审查本分支，运行相关测试，提交推送独立分支，不合并、不覆盖安装。最终记录修复与未实现/无法验证项，满足完成条件才取消并核实小时调度。
 
+文档实现由一个fresh子代理串行完成，只改README.md、NOTICE.md、docs/CAPABILITY-DIFF.md，新增docs/ACCEPTANCE-20261022.md；不改生产代码、tests、controller计划/状态，不运行整套测试、不外部写入。以Task1–5报告、progress所有Ruling和代码证据、原27函数的docs/readonly-cli.md为基础，修正文档里仍残留的主人免审、公开可见证明、防篡改、fork/MCP/扩展沙箱等失真；测试说明改npm test及实际最终计数，不能沿38条旧命令漏新回归。补17项矩阵（精确证据与离线/宿主区分）、全部能力差集/设置差集、未支持理由/后续建议、上次为何停工及本次完成内容、DSH两项策略反馈的决定与代价、mergeDeep JSON配置边界、原安装仍0.5.0/修复包0.5.1区别、完整代决策清单。许可只陈述已核对署名，不作法律审计承诺；不删历史署名。代码基线固定aefd53718751453f618aeed1c91ecf9509b8edbf，上游对比参考270cbf0d7a6523746f9b88e4527a4cd5589cd03d，不把期间远端上游更新默默并入。不得宣称尚未发生的推送/安装/调度取消；最终发布和取消证据由controller终结记录核实。文档diff检查、链接/证据自查后提交自己的文件，写task-6-report.md，再独立任务门禁；之后最强模型全分支审查，所有外部推送/调度操作由controller执行。
+
 扫码须用假网络覆盖 waiting/scanned/expired、会话取消/旧key不能覆盖新凭据、正确保存字段及复用，不回显值；不申请真人扫码。能力清单逐项补全 reportLevel、commentPerRound/replyPerRound、楼中楼开关、DM both、search order、检查更新以及原清单全部条目。可安全实现的轻量差集补齐；ASR/uv/MCP等明确重依赖或新子系统不自动下载安装，记录边界和理由，不伪称已支持。基座设置实际已是原生section，修正文档错误。第14项已用无凭据公开API读取指定视频简介与前8热评，网页读取失败；未声称完整观看视频。第15项API fork=false、merge-base退出1，保留原仓并记录需后续GitHub仓库操作；不得删仓或伪造提交血缘。
 
 能力盘点必须以scroll实际公开函数为底表：bili_search/comments/subtitle/danmaku/video_info/reply/crawl/send_dynamic/upload_video/upload_video_multi/send_opus/video_zones/hot_videos/hot_buzzwords/weekly_hot/rank/user_info/user_videos/favorite_lists/favorite_content/send_message/unread_messages/received_replies/received_at_and_likes，再核对原README的日报/每日额度/关键词/人设工作区/收藏夹/依赖/更新/运行状态等设置。不要说“30条CLI基本重合”而漏掉原只读聚合或投稿功能；未实现应准确列出具体能力、理由和建议，非实际支持的MCP名字/哈希链不能冒充MCP或防篡改。新对外写入能力与重型子系统不得为填矩阵擅自启用；测试不调用真实接口。
