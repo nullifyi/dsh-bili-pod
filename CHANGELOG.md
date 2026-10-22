@@ -1,3 +1,46 @@
+## v0.5.2（2026-10-22）· 同步上游 v0.4.5
+
+上游 `dsh-bili-whale` 从 v0.4.0 走到 v0.4.5（33 个提交 / 56 个文件），这一版把它们当中
+**跟我们有关的部分**逐项移植进来，见 [上游同步记录](docs/UPSTREAM-SYNC.md)。
+
+### 修
+
+- **作息**：同一窗口里两次醒来之间至少隔 10 分钟（峰谷模式下同样生效）；「不看」只消耗一次机会，
+  不再把整个窗口作废 —— 之前 30% 的跳过概率会把一个窗口剩下的次数一起吃掉。
+- **私信**：`msg[dev_id]` 从「每条随机」改成固定设备 ID（`~/.bili-ai/dev_id`，0600）——
+  随机 dev_id 会让风控看到「同一个人在多台设备间切换」，小号容易被封控。
+- **主人回复检测**：`quota react` 不再用子串匹配（会把别人说「主人」也算上），改用
+  `comment-digest --json` 的 `ownerReplies` / `ownerReplyItems` 按 mid 精确判定（上游 Issue #14）。
+- **评论**：`parentAuthor` 支持顶层评论（`root=0`）与 `type` 参数，回顶层评论不再永远判重失败；
+  新增 `comment --check` 只读预检（这条回复能不能发）；主人免「一个人只回一条」且不再写进
+  `replied.json`；`[dry]` 预检移到额度闸之后，看到的是「真能发」的结论。
+- **私信对账**：`dm-await` 改两阶段 `--peek` / `--ack` 回执 + 原子写 + owner 隔离 ——
+  宿主交出去之后才确认，避免「叫醒失败但消息已被标成看过」。
+- **抗限流**（新 `tools/lib/bili-api.mjs`）：元信息缓存 24h（view / acc/info，nav 10 分钟）、
+  跨进程节流 300ms、412 / 429 / 风控码熔断（5→10→20→30 分钟退避）、自动 WBI 签名、
+  playurl 的 -412 判「内容受限」不计入熔断。已接线到 view / playurl / feed / recon / debrief /
+  subtitles / comments / quota / fav；`deps` 新增「B站 限流」体检项，`/status` 返回 `api` 现状。
+- **唤醒提示**：「每次看几条」读 `night.maxVideos`；当前 `share.via` 写进提示（设了评论区就不会走私信）；
+  回复要挂在对方那条评论下面；长片抽帧超时放宽到 25 分钟级别。
+- **设置页**：buvid3 校验放宽（合法的 `…infoc` 结尾不再被判错），后端的 `warn` 现在真的显示出来；
+  监听分组新增「我在 @ 里点『总结』时回一份摘要」（`listen.mentionSummary`，默认关）。
+- **运行时解析**：`lib/node-runtime.js` 改为委托 `tools/lib/runtime.mjs` 的 `resolveRuntime`
+  （真跑一次 `--version` 验活，候选含 `DSH_NODE` / 桌面内置 node / `dsh-runtimes/*` / PATH）。
+
+### 同步过程中修掉的组合问题
+
+- 主人免记 `replied.json` 之后，发送对账的 ready 条件改为只看 `quota.json` + `pod-sent.json`。
+- `verify-now` 在 Node 24 / Windows 上用 `process.exit()` 会撞 undici 的套接字关闭断言
+  （退出码变 127）→ 改用 `process.exitCode`。
+- `bili-api` 兼容只有 `json()` 的测试 stub；游客态（nav 无 `wbi_img`）不被 WBI 改写打死。
+- 只读 CLI 的假 fetch 允许 `/x/web-interface/wbi/view`（与生产一致）。
+
+### 测试
+
+`node --test tests/*.test.mjs` → 163 tests / 163 pass。
+
+---
+
 ## v0.5.1（2026-10-22）· 审查分支交付
 
 - 新增轻量 Node 只读 CLI：`popular`、`buzzwords`（热词图鉴）、`weekly`、`rank`、`user-info`、`user-videos`、`fav-remote`、`messages`。支持明确的分页/排序参数、JSON 输出、API 错误退出及 scope 只读注册；API 来源与原 scroll 27 个公开函数的逐项差异见 [只读 CLI 文档](docs/readonly-cli.md)。

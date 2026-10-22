@@ -12,8 +12,10 @@
 //   node quota.mjs allow "room:<房间号>"         往白名单加一项（也支持 --remove 删除）
 //
 // 约定：check 只挡"发言类"动作（comment / dynamic / danmaku）；读操作永远不受限。
+import { apiGet } from '../lib/bili-api.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
+import { newReplies } from '../lib/feedback.mjs'
 import { config } from '../lib/config.mjs'
 import { NODE_EXE } from '../lib/nodebin.mjs'   // 2026-10-21：别用 process.execPath（Electron 里它是主程序 ✗）
 import { withFileLock, atomicJson } from '../../lib/file-state.mjs'
@@ -47,10 +49,8 @@ async function titleOf(bv, cache) {
   if (!bv) return ''
   if (cache[bv]) return cache[bv]
   try {
-    const r = await fetch('https://api.bilibili.com/x/web-interface/view?bvid=' + bv, {
-      headers: { 'user-agent': 'Mozilla/5.0', referer: 'https://www.bilibili.com/' },
-    })
-    const j = await r.json()
+    // 2026-10-22（上游 v0.4.4）：走 apiGet —— 24h 缓存 + 300ms 节流 + 412 熔断
+    const j = await apiGet('https://api.bilibili.com/x/web-interface/view?bvid=' + bv, { 'user-agent': 'Mozilla/5.0', referer: 'https://www.bilibili.com/' })
     const t = String(j?.data?.title ?? '')
     if (t) cache[bv] = t
     return t
@@ -195,20 +195,23 @@ if (cmd === 'ask') {
 
 if (cmd === 'react' && opt.auto) {
   try {
-    const { execFileSync } = await import('node:child_process')
+    const { execFileSync } = await import('../lib/capture.mjs')
     const here = (f) => decodeURIComponent(new URL(f, import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, '$1')
     const hours = String(opt.hours ?? 72)
     const found = []
     // ① 回复
     try {
-      const out = execFileSync(NODE_EXE, [here('./comment-digest.mjs'), '--hours', hours, '--pages', '1'], { encoding: 'utf8' })
-      const ownerName = String(config().owner?.name ?? '')
-      const ownerMid = String(config().owner?.mid ?? '')
-      if ((ownerName && out.includes(ownerName)) || (ownerMid && out.includes(ownerMid))) {
-        // 只把"和主人有关"的行拿去算哈希（内容变了才继续算新表态 ✓）
-        const lines = String(out).split(/\r?\n/).filter((l) => (ownerName && l.includes(ownerName)) || (ownerMid && l.includes(ownerMid)))
+      // 2026-10-22 修（上游 Issue #14）：以前拿人类可读文本做子串匹配 ✗
+      //   统计行/标签行里出现主人名也会命中 → 误记反馈 → 沉默衰减被清零 ✗
+      //   现在读 --json 的结构化结果，按 mid 精确比对 ✓
+      const out = execFileSync(NODE_EXE, [here('./comment-digest.mjs'), '--hours', hours, '--pages', '1', '--json'], { encoding: 'utf8' })
+      let digest = null
+      try { digest = JSON.parse(String(out).trim().split(/\r?\n/).pop() ?? '') } catch {}
+      const ownerReplyCount = Number(digest?.ownerReplies ?? 0)
+      if (ownerReplyCount > 0) {
+        const lines = (digest?.ownerReplyItems ?? []).map((r) => `${r.time} [${r.kind}] ${r.who}：「${r.text}」`)
         const { createHash } = await import('node:crypto')
-        found.push({ kind: 'reply', label: '回复', hash: createHash('sha1').update(lines.join('\n')).digest('hex') })
+        found.push({ kind: 'reply', label: '回复', items: digest.ownerReplyItems, hash: createHash('sha1').update(lines.join('\n')).digest('hex') })
       }
     } catch { /* 收件箱失败不影响点赞这一路 */ }
     // ② 点赞（--json 里 ownerLiked 是确定数字，比抠文本稳）
@@ -241,12 +244,14 @@ if (cmd === 'react' && opt.auto) {
       const fb = loadFeedback()
       const nowIso = new Date().toISOString()
       let changed = false
+      let newest = Number.isFinite(Date.parse(fb.last)) ? Date.parse(fb.last) : 0
       fb.events = [...(fb.events ?? [])]
       for (const f of found) {
         if (f.kind === 'like') {
           const prev = Number(fb.lastLikeTime ?? 0)
           if (f.maxTime > prev) {
             fb.lastLikeTime = f.maxTime
+            newest = Math.max(newest, Math.min(Date.now(), f.maxTime * 1000))
             // 只有"这次新出现的"才记（比上次 maxTime 新的那些）✓
             const fresh = (f.liked ?? []).filter((x) => x.likeTime > prev)
             if (fresh.length) {
@@ -272,21 +277,27 @@ if (cmd === 'react' && opt.auto) {
             changed = true
           }
         } else if (f.kind === 'reply') {
-          const prev = String(fb.lastReplyHash ?? '')
-          if (f.hash !== prev) {
-            fb.lastReplyHash = f.hash
-            fb.events.push({ at: nowIso, note: 'auto: 检测到主人（回复）' })
+          // 2026-10-22（上游）：按「见过的事件 ID」计数，不再拿整窗哈希当计数器 ✗
+          const reply = newReplies(f.items, fb)
+          const migrated = !fb.lastReplyTime && fb.lastReplyHash === f.hash
+          fb.lastReplyHash = f.hash
+          fb.lastReplyTime = reply.time
+          fb.replyIds = reply.ids
+          if (reply.fresh.length && !migrated) {
+            newest = Math.max(newest, reply.time)
+            fb.events.push({ at: new Date(reply.time).toISOString(), note: 'auto: 检测到主人（回复）' })
             changed = true
           }
         }
       }
       fb.events = fb.events.slice(-200)
       if (changed) {
-        fb.last = nowIso
+        fb.last = new Date(newest || Date.now()).toISOString()
         saveFeedback(fb)
         const names = found.filter((f) => (f.kind === 'like' ? f.maxTime > Number(fb.lastLikeTime ?? 0) - 1 : true)).map((f) => f.label)
         console.log(`✓ 自动识别到主人的【新】表态（${names.join(' / ') || found.map((f) => f.label).join(' / ')}）→ 已记一次反馈（沉默清零）`)
       } else {
+        saveFeedback(fb) // 迁移后的 replyIds/lastReplyTime 也要落盘，否则下一轮重复判定
         console.log('（近 ' + hours + ' 小时有主人的表态，但都是【已经记过的】→ 不重复记 ✓ 沉默继续累计）')
       }
     } else {

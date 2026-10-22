@@ -1,3 +1,4 @@
+import { apiGet } from '../lib/bili-api.mjs'
 // 收藏（2026-10-20 加，主人定：收藏 ≠ 低配的分享，是"我想留着"）
 //
 // 用法:
@@ -79,8 +80,8 @@ if (opt.list) {
 
 // ── 取她的默认收藏夹 id ────────────────────────────────────
 async function defaultFavId() {
-  const r = await fetch(`https://api.bilibili.com/x/v3/fav/folder/created/list-all?up_mid=${selfMid}`, { headers: H })
-  const j = await r.json()
+  const j = await apiGet(`https://api.bilibili.com/x/v3/fav/folder/created/list-all?up_mid=${selfMid}`, H)
+  if (j.code !== 0) throw new Error(`取收藏夹失败：${j.message ?? j.code}`)
   const list = j.data?.list ?? []
   if (j.code !== 0) throw new Error('读取收藏夹失败')
   const requested = opt.folder ?? cfg.favFolderId

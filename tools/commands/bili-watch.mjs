@@ -1,3 +1,4 @@
+import { apiGet } from '../lib/bili-api.mjs'
 // 让 agent 真"看"视频：取直链 → 下载 → ffmpeg 抽帧拼成一张九宫格 → 输出图片路径（再交给 read_image 看）
 //
 // 用法: node bili-watch.mjs <BV号> [列x行，默认 3x3] [outDir]
@@ -7,6 +8,7 @@
 // 依赖：ffmpeg（查找顺序见 lib/ffmpeg.mjs：$FFMPEG → PATH → bin/ → ~/.dsh/bili-pod/bin → 本机剪映）
 import fs from 'node:fs'
 import path from 'node:path'
+// 注：ffmpeg 抽帧继续用 node 原生 execFileSync（离线测试会替换它来验调用参数）
 import { execFileSync } from 'node:child_process'
 import { requireFfmpeg } from '../lib/ffmpeg.mjs'
 import { dshPath } from '../lib/paths.mjs'
@@ -25,7 +27,7 @@ const cred = JSON.parse(fs.readFileSync(path.join((process.env.USERPROFILE || pr
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
 const H = { 'user-agent': UA, referer: 'https://www.bilibili.com/', cookie: `SESSDATA=${cred.sessdata}; bili_jct=${cred.bili_jct}; buvid3=${cred.buvid3}` }
 
-const view = await (await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`, { headers: H })).json()
+const view = await apiGet(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`, H)
 if (view.code !== 0) { console.error(`view 失败 code=${view.code} ${view.message}`); process.exit(3) }
 const { cid, title, duration, owner } = { ...view.data, owner: view.data.owner?.name }
 console.log(`标题: ${title}`)

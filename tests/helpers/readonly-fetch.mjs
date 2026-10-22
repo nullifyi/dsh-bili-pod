@@ -27,7 +27,7 @@ globalThis.fetch = async (input, options = {}) => {
   let value
   if (u.origin === 'https://api.bilibili.com') {
     if (u.pathname === '/x/web-interface/nav') value = {code:0,data:{wbi_img:{img_url:'https://fixture.local/abcdefghijklmnopqrstuvwxyz012345.png',sub_url:'https://fixture.local/abcdefghijklmnopqrstuvwxyz012345.png'}}}
-    else if (u.pathname === '/x/web-interface/view') value = {code:0,data:{bvid:'BV1234567890',aid:2,cid:1,title:'fixture title',owner:{name:'fixture',mid:1},duration:30,pic:'https://fixture.local/cover',stat:{},pubdate:1}}
+    else if (u.pathname === '/x/web-interface/view' || u.pathname === '/x/web-interface/wbi/view') value = {code:0,data:{bvid:'BV1234567890',aid:2,cid:1,title:'fixture title',owner:{name:'fixture',mid:1},duration:30,pic:'https://fixture.local/cover',stat:{},pubdate:1}}
     else if (u.pathname === '/x/player/wbi/v2') value = {code:0,data:{subtitle:{subtitles:[{lan:'zh-CN',subtitle_url:'https://fixture.local/subtitle'}]}}}
     else if (allowed.has(u.pathname)) {
       if (process.env.TEST_API_FAIL) value = {code:-352,message:'fixture rejected'}

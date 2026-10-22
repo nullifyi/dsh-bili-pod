@@ -11,7 +11,9 @@ globalThis.fetch = async (url, opts = {}) => {
   } else if (u.includes('/reply/reply')) {
     if (process.env.TEST_VERIFY && opts.headers?.cookie) {
       const base = process.env.USERPROFILE + '/.bili-ai/'
-      const ready = !!(JSON.parse(fs.readFileSync(base + 'quota.json')).log.length && JSON.parse(fs.readFileSync(base + 'replied.json')).byUid['333'].length && JSON.parse(fs.readFileSync(base + 'pod-sent.json')).items.length)
+      // 2026-10-22：upstream v0.4.5 起被回复的是主人不进 replied.json（不会被锁 30 天）
+      //   → 「发送收据写全了才观察」改为看 quota + pod-sent ✓
+      const ready = !!(JSON.parse(fs.readFileSync(base + 'quota.json')).log.length && JSON.parse(fs.readFileSync(base + 'pod-sent.json')).items.length)
       fs.appendFileSync(process.env.TEST_REQUESTS, JSON.stringify({ event: 'verification-accounting', ready }) + '\n')
       if (!ready) throw new Error('accounting must precede observation')
       if (process.env.TEST_VERIFY === 'hang') return new Promise(() => {})

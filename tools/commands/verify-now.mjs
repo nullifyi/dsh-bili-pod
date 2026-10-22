@@ -36,11 +36,14 @@ if (rpid) {
     console.log(`rpid=${res.rpid} · ${res.bvid || rec.oid} → ${res.visible === true ? '本人登录可见' : '未确认（不代表未发出）'}`)
     console.log(`  依据：${res.how}${res.note ? ' · ' + res.note : ''}`)
   }
-  process.exit(res.visible === true ? 0 : 4)
+  // 2026-10-22 修：Node 24 + Windows 下 `process.exit()` 撞上 undici 正在关闭的
+  //   套接字会触发 libuv 断言（handle->flags & UV_HANDLE_CLOSING）→ 退出码变 127 ✗
+  //   复核本身已经成功，却让调用方以为失败。改成 exitCode + 自然退出 ✓
+  process.exitCode = res.visible === true ? 0 : 4
+} else {
+  const max = Number(get('max', 6)) || 6
+  const out = await verifyRecent({ max, cred, review: config().review, log: (s) => console.error('· ' + s) })
+  if (JSON_OUT) console.log(JSON.stringify(out, null, 2))
+  else console.log(out.text.trim() || '（没有可复核的）')
+  process.exitCode = 0
 }
-
-const max = Number(get('max', 6)) || 6
-const out = await verifyRecent({ max, cred, review: config().review, log: (s) => console.error('· ' + s) })
-if (JSON_OUT) console.log(JSON.stringify(out, null, 2))
-else console.log(out.text.trim() || '（没有可复核的）')
-process.exit(0)

@@ -48,7 +48,7 @@ export function historyOf(state = {}, now = Date.now()) {
   const cutoff = new Date(now); cutoff.setDate(cutoff.getDate() - 3)
   for (const key of Object.keys(usedCount)) if (key.slice(0, 10) < dayOf(cutoff)) delete usedCount[key]
   return { schema: 2, date: dayOf(now), wakes: state.date === dayOf(now) ? Number(state.wakes ?? 0) : 0,
-    usedCount, skippedWindows: [...skippedWindows].filter(key => key.slice(0, 10) >= dayOf(cutoff)) }
+    wokeAt: state.wokeAt ?? null, usedCount, skippedWindows: [...skippedWindows].filter(key => key.slice(0, 10) >= dayOf(cutoff)) }
 }
 export function isPending(state, now = Date.now()) {
   return state?.schema === 2 && ['wake', 'skip'].includes(state.action) && !state.fired && !state.woke &&
@@ -60,10 +60,24 @@ export function makePlan(cfg, state = {}, now = Date.now(), random = Math.random
   const history = historyOf(state, now)
   const done = reason => ({ ...history, action: 'done', done: true, reason })
   if (history.wakes >= maxWakes(cfg)) return done('今天醒来次数已用完（或所有窗口为零次）')
-  const pool = occurrences(cfg, now).filter(w => w.wakes > (history.usedCount[w.key] ?? 0) && !history.skippedWindows.includes(w.key))
+  // 上游 v0.4.1 同步：不再用 skippedWindows 拉黑整个窗口 —— 只看「这个窗口还剩几次机会」
+  const pool = occurrences(cfg, now).filter(w => w.wakes > (history.usedCount[w.key] ?? 0))
     .sort((a, b) => a.endsAt - b.endsAt || a.startsAt - b.startsAt)
   if (!pool.length) return done('今天可用窗口已结束或已经处理')
-  const w = pool[0], from = Math.max(now, w.startsAt)
+
+  // 上游 v0.4.1 同步：同一窗口的多次醒来之间加最小间隔（默认 10 分钟，cfg.minGapMin 可调）
+  //   窗口里放不下就换下一个；都不行就今天到此为止（少醒一次，不把间隔硬压短）
+  const lastWokeAt = Number.isFinite(Date.parse(state.wokeAt ?? '')) ? Date.parse(state.wokeAt) : 0
+  const gapMs = Math.max(60_000, Math.floor((Number.isFinite(Number(cfg.minGapMin)) ? Number(cfg.minGapMin) : 10) * 60_000))
+  let picked = null
+  for (const cand of pool) {
+    const earliest = Math.max(now, cand.startsAt, lastWokeAt + gapMs)
+    if (earliest >= cand.endsAt - 30_000) continue
+    picked = { cand, earliest }
+    break
+  }
+  if (!picked) return done('今天可用窗口里已经排不下下一次（间隔不够）')
+  const w = picked.cand, from = picked.earliest
   const atMs = from + Math.floor(random() * Math.max(1, w.endsAt - from))
   const atDate = new Date(atMs), at = atDate.getHours() * 60 + atDate.getMinutes()
   // 峰谷模式：每个窗口可以有自己的跳过概率（lib/tide.mjs 挂的 skipChanceFor）；
@@ -81,7 +95,10 @@ export function completePlan(state, now = Date.now()) {
   if (state.fired) return state
   const h = historyOf(state, now)
   if (!state.windowKey) throw new Error('计划缺少窗口标识，请重新 plan')
-  if (state.action === 'skip') h.skippedWindows = [...new Set([...h.skippedWindows, state.windowKey])]
-  else if (state.action === 'wake') { h.usedCount[state.windowKey] = (h.usedCount[state.windowKey] ?? 0) + 1; h.wakes += 1 }
+  // 上游 v0.4.1 同步：「不看」只消耗一次机会（和看视频一样占一个 wake 位），不再把整个窗口作废
+  if (state.action === 'skip' || state.action === 'wake') {
+    h.usedCount[state.windowKey] = (h.usedCount[state.windowKey] ?? 0) + 1
+    h.wakes += 1
+  }
   return { ...state, ...h, fired: true, woke: state.action === 'wake', wokeAt: new Date(now).toISOString() }
 }

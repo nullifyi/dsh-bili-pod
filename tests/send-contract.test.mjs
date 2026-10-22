@@ -45,8 +45,10 @@ test('actual CLI recognizes data.root author and preserves normalized coordinate
   assert.equal(r.status, 0, r.stdout + r.stderr)
   assert.equal(posts(env).length, 1)
   assert.equal(new URLSearchParams(posts(env)[0].body).get('parent'), '2')
-  const replied = JSON.parse(fs.readFileSync(path.join(env.HOME, '.bili-ai/replied.json')))
-  assert.equal(replied.byUid['333'].length, 1)
+  // 2026-10-22（上游 v0.4.5 语义）：被回复的是「主人本人」→ 不记 once-per-person、也不进 replied.json ✓
+  const repliedPath = path.join(env.HOME, '.bili-ai/replied.json')
+  const replied = fs.existsSync(repliedPath) ? JSON.parse(fs.readFileSync(repliedPath)) : { byUid: {} }
+  assert.equal((replied.byUid['333'] ?? []).length, 0)
 })
 for (const scenario of ['draft', 'approval', 'host-timeout', 'host-receipt', 'host-uncertain', 'host-rejected', 'verify', 'scheduler-verify', 'scheduler-legacy-not-found', 'credentials-bom', 'verify-send-error', 'verify-send-hang', 'verify-send-accounting', 'sent-race', 'stale-lock', 'ledger']) test('offline contract: ' + scenario, t => {
   const r = run(sandbox(t), 'tests/helpers/send-contract-worker.mjs', [scenario])

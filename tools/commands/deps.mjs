@@ -81,6 +81,21 @@ try {
   items.push({ name: 'node 运行时', ok: false, detail: '检查失败：' + String(e?.message ?? e).slice(0, 80), fix: '设置 DSH_NODE' })
 }
 
+// 2026-10-22（上游 v0.4.5）：把「接口缓存 / 熔断」现状也列出来 ——
+//   被 412 限流时最想知道的就是「还要等多久」和「缓存里还有多少能撑」
+try {
+  const { apiState } = await import('../lib/bili-api.mjs')
+  const st = apiState()
+  items.push({
+    name: 'B站 限流',
+    ok: !st.banned,
+    detail: st.banned
+      ? `熔断中，约 ${st.banMinutesLeft} 分钟后恢复（原因 ${st.banWhy ?? '-'}）；缓存里 ${st.cacheEntries} 条可撑`
+      : `正常 · 元信息缓存 ${st.cacheEntries} 条`,
+    fix: '等它自己恢复（5→10→20→30 分钟退避）；期间只读缓存，别手动狂点',
+  })
+} catch { /* 没有 api 模块时跳过这项 */ }
+
 items.push({ name: '数据目录可写', ok: dirOk, detail: path.join(HOME, '.bili-ai'), fix: '检查该目录权限' })
 
 const bad = items.filter((i) => !i.ok)

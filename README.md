@@ -5,6 +5,7 @@
 > 你没在的时候它也在，但**不多说一句话**。
 >
 > 本项目的代码派生自 [Alterssss/dsh-bili-whale](https://github.com/Alterssss/dsh-bili-whale)（MIT），保留上游署名。
+> 已同步上游 v0.4.5（33 个提交 / 56 个文件）的修复，逐项映射见[上游同步记录](docs/UPSTREAM-SYNC.md)。
 > 2026-10-22 核对时 GitHub 仓库为 public、`fork=false`，与固定上游参考提交无共同祖先；这不满足「先 fork 再修改」，详见[验收记录](docs/ACCEPTANCE-20261022.md)。
 > 「养鱼」那套骨架、工具链、调度器、克制规则都是上游的功劳；这一版在上游之上加了一层「可插拔」：
 > 扫码登录、峰谷生物钟、日记文件夹、账本、发前审核 / 发出后复核、mod 扩展接口。

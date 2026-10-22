@@ -32,7 +32,9 @@ test('all skipped occurrences stay excluded after state saves', () => {
   const second=completePlan(makePlan(c,first,now,()=>0),now)
   assert.notEqual(first.windowKey,second.windowKey)
   assert.equal(makePlan(c,historyOf(second,now),now).action,'done')
-  assert.equal(second.skippedWindows.length,2)
+  // 上游 v0.4.1 同步：skip 改成消耗机会（不再拉黑窗口）→ 断言两个窗口都被消耗
+  assert.equal(Object.keys(second.usedCount).length,2)
+  assert.equal(Object.values(second.usedCount).reduce((a,b)=>a+b,0),2)
 })
 test('one dated window cannot wake again after midnight', () => {
   const p=makePlan(night,{},time('21T23:10:00'),()=>0)
@@ -82,4 +84,29 @@ test('share policy enforces switch, score, reason and rank for both transports',
   assert.throws(()=>validateShare({share:{enabled:false}},good))
   for(const patch of [{score:undefined},{score:true},{score:21},{score:12},{reason:'短'},{rank:2}])
     assert.throws(()=>validateShare({}, {...good,...patch}))
+})
+
+test('skip 只消耗一次机会，wakes>1 的窗口不会被整段作废', () => {
+  // 上游 v0.4.1 同步：以前 skip 会把整个窗口拉黑 → wakes:5 的窗口只醒 1 次就 done
+  const c = cfg([{ start: '20:00', end: '24:00', wakes: 5 }], 0)
+  const now = time('21T20:00:00')
+  const skipCfg = { ...c, skipChance: 1 }
+  const p1 = makePlan(skipCfg, {}, now, () => 0)
+  assert.equal(p1.action, 'skip')
+  const after = completePlan(p1, now + 60_000)
+  assert.equal(after.usedCount[p1.windowKey], 1, 'skip 应占掉一次机会')
+  assert.equal(after.skippedWindows.length, 0, '不该把窗口拉黑')
+  const p2 = makePlan(c, after, now + 11 * 60_000, () => 0)
+  assert.equal(p2.action, 'wake')
+  assert.equal(p2.windowKey, p1.windowKey)
+  assert.match(p2.withinWindow, /第 2\/5 次/)
+})
+
+test('同一窗口两次醒来之间至少隔 minGapMin（默认 10 分钟）', () => {
+  // 上游 v0.4.1 同步：以前均匀随机，实测 22:53/22:59/23:11 挤在 18 分钟里
+  const c = cfg([{ start: '20:00', end: '24:00', wakes: 3 }], 0)
+  const now = time('21T20:00:00')
+  const first = completePlan(makePlan(c, {}, now, () => 0), now)
+  const second = makePlan(c, historyOf(first, now + 60_000), now + 60_000, () => 0)
+  assert.ok(second.atMs - Date.parse(first.wokeAt) >= 10 * 60_000)
 })

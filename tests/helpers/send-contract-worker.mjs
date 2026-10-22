@@ -36,7 +36,12 @@ if (scenario === 'draft') {
   assert.equal(sent.rpid, '9007199254740993'); assert.equal(sent.type, '11')
   assert.equal(s.readOperation(issued.operationId).status, 'accepted')
   if (process.env.TEST_VERIFY !== 'accounting') assert.equal(JSON.parse(fs.readFileSync(path.join(home, '.bili-ai/quota.json'))).log.length, 1)
-  assert.equal(JSON.parse(fs.readFileSync(path.join(home, '.bili-ai/replied.json'))).byUid['333'].length, 1)
+  {
+    // 被回复的是主人本人 → upstream v0.4.5 语义：不记 once-per-person（文件可不存在）
+    const rp = path.join(home, '.bili-ai/replied.json')
+    const led = fs.existsSync(rp) ? JSON.parse(fs.readFileSync(rp)) : { byUid: {} }
+    assert.equal((led.byUid['333'] ?? []).length, 0)
+  }
   if (process.env.TEST_VERIFY === 'accounting') {
     assert.equal(s.readOperation(issued.operationId).accountingStatus, 'incomplete')
     assert.equal(sent.verifyAttempts, 0)

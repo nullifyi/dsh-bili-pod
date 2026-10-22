@@ -67,8 +67,11 @@ for (let i = 2; i < process.argv.length; i += 1) {
 const oid = args.get('oid')
 const bvid = args.get('bvid')
 let message = args.get('message')
-const root = args.get('root')     // 线程根评论 rpid（二级回复用）
+let root = args.get('root')     // 线程根评论 rpid（二级回复用）
 const parent = args.get('parent') || root // root-only means reply to the root author
+// 上游 v0.4.5 同步：收件箱里【顶层评论】的 root_id 是 0，而 /x/v2/reply/reply?root=0 什么都查不到
+//   → root=0 的真实含义就是「parent 自己就是顶层评论」，兜成 parent 才查得到作者（否则 fail-closed 挡死）
+if (parent && (!root || String(root) === '0')) root = String(parent)
 const ONCE = process.argv.includes('--once-per-person') || (parent && config().listen?.oncePerPerson === true)
 let replyAuthor = null
 // type=1 视频（默认）；type=11 动态/图文。⚠️ 动态的 oid 必须用
@@ -80,8 +83,39 @@ const refererArg = args.get('referer') ? String(args.get('referer')) : ''
 const dry = args.get('dry') === true || args.has('dry')
 const go = args.get('go') === true || args.has('go')
 
+// 上游 v0.4.5 同步：--check 只读预检 —— 回答「这条回复到底能不能发」，不发文、不占额度
+const CHECK = args.get('check') === true || args.has('check')
+if (CHECK) {
+  if (!oid) { console.error('--check 需要 --oid'); process.exit(2) }
+  const who = (root && parent) ? await parentAuthor(oid, root, parent) : null
+  const ownerMid = String(config().owner?.mid ?? '')
+  const lines = [`oid=${oid}  root=${root ?? '(未给)'}  parent=${parent ?? '(未给)'}  type=${type}`]
+  if (!root || !parent) {
+    lines.push('\n这是【顶层评论】（不带 --root/--parent）→ 判重不生效，可以直接发 ✓')
+    console.log(lines.join('\n')); process.exit(0)
+  }
+  if (!who?.mid) {
+    lines.push('\n✗ 查不到被回复者的 uid → 发的时候会被 fail-closed 挡下来 ✗')
+    lines.push('  常见原因：--root 传了 0（本命令会自动兜成 parent）/ --parent 不是楼中楼也不是顶层评论 / 评论已删')
+    console.log(lines.join('\n')); process.exit(2)
+  }
+  lines.push(`\n被回复者：${who.name || '(无名)'}（mid ${who.mid}）`)
+  if (ownerMid && String(who.mid) === ownerMid) {
+    lines.push('✓ 是主人 → 「同一个人只回一条」不适用 ✓ 能发 ✓')
+    console.log(lines.join('\n')); process.exit(0)
+  }
+  const led = loadReplied()
+  const hist = (led.byUid?.[who.mid] ?? []).filter((x) => Date.now() - new Date(x.at).getTime() < ONCE_DAYS * 86_400_000)
+  if (hist.length) {
+    lines.push(`✗ ${ONCE_DAYS} 天内已经回过 TA（${hist[0].at} · ${hist[0].target}）→ 带 --once-per-person 会被拒 ✗`)
+    console.log(lines.join('\n')); process.exit(2)
+  }
+  lines.push('✓ 30 天内没回过 TA → 能发 ✓')
+  console.log(lines.join('\n')); process.exit(0)
+}
+
 if (!oid || (!bvid && !refererArg) || !message) {
-  console.error('usage: --oid <aid|comment_id_str> [--bvid <BV...> | --referer <url>] --message "<text>" [--type 1|11] [--root <rpid> --parent <rpid>] [--dry | --go]')
+  console.error('usage: --oid <aid|comment_id_str> [--bvid <BV...> | --referer <url>] --message "<text>" [--type 1|11] [--root <rpid> --parent <rpid>] [--dry | --go] [--check]')
   process.exit(2)
 }
 if (dry && go) { console.error('pick either --dry or --go, not both'); process.exit(2) }
@@ -131,7 +165,11 @@ if (ONCE) {
   } else {
     const who = await parentAuthor(oid, root, parent)
     replyAuthor = who
-    if (!who?.mid) {
+    const ownerMid = String(config().owner?.mid ?? '')
+    if (who?.mid && ownerMid && String(who.mid) === ownerMid) {
+      // 上游 v0.4.5 同步：这个开关是防陌生人来拉锯的；对主人生效会把他锁 30 天
+      console.log(`  [once] 被回复的是主人（${who.name || who.mid}）→ 不适用「一个人只回一条」✓ 直接回`)
+    } else if (!who?.mid) {
       // fail-closed（2026-10-17，Kimi 评审指出）：判重系统状态未知时，默认动作是**这次不回**
       console.error('  [once] 没查到被回复者的 uid → 判重状态未知，**这次不回**（fail-closed）')
       console.error('  （确认要回就别传 --once-per-person，或者先手工确认这个人没被回过）')
@@ -226,10 +264,6 @@ console.log('  cookie : SESSDATA=***; bili_jct=***; buvid3=***   (已脱敏)')
 console.log('  body   : ' + body.replace(encodeURIComponent(String(cred.bili_jct)), '***csrf***'))
 console.log(`  正文长度 ${message.length} 字符（上限 1000）；oid=${oid}；emoji/表情需转义符，本脚本只发纯文本`)
 
-if (dry) {
-  console.log('\n[dry] 未发送。确认文案与账号后，把 --dry 换成 --go 再跑一次。')
-  process.exit(0)
-}
 
 // 闸门：自主发言（--auto）或分享型（--share）才拦；主人授权的发言只显示额度
 {
@@ -240,6 +274,11 @@ if (dry) {
     console.error('  → 拒绝发送。这是硬约束第 4 条的代码实现，不要绕过（要发请主人当场授权，或改白名单/额度）。')
     process.exit(2)
   }
+}
+
+if (dry) {
+  console.log('\n[dry] 预检通过（额度闸也过了），未发送。把 --dry 换成 --go 时仍会重新检查额度。')
+  process.exit(0)
 }
 
 // 判重（--once-per-person）已在入口处检查，这里直接发
@@ -294,7 +333,11 @@ if (out.code === 0) {
   if (ONCE && parent && root) {
     try {
       const who = replyAuthor
-      if (who?.mid) {
+      // 上游 v0.4.5 同步：主人不进 replied.json —— 否则回他一条就把他锁 30 天
+      const ownerMidRec = String(config().owner?.mid ?? '')
+      const isOwnerRec = !!(who?.mid && ownerMidRec && String(who.mid) === ownerMidRec)
+      if (isOwnerRec) console.log('  [once] 被回复的是主人 → 不记账（下次还能回）✓')
+      if (who?.mid && !isOwnerRec) {
         withFileLock(REPLIED, () => {
         const led = loadReplied()
         led.byUid ??= {}
