@@ -1,92 +1,84 @@
-# 能力对照与差集清单
+# 能力与设置差集（2026-10-22，0.5.1）
 
-三个项目的关系：
+参照项目为 [dsh-bili-whale](https://github.com/Alterssss/dsh-bili-whale) 与 [dsh-bili-scroll](https://github.com/c1overzz/dsh-bili-scroll)。whale 是代码派生来源；GitHub `fork=false` 的事实及固定比较提交见[验收记录](ACCEPTANCE-20261022.md)。本清单以本轮读取的原源码为准，不声称已合入最新上游。
 
-- **基座** = [dsh-bili-whale](https://github.com/Alterssss/dsh-bili-whale)（本项目的代码血缘，MIT）
-- **①** = [dsh-bili-scroll](https://github.com/c1overzz/dsh-bili-scroll)（参照对象，MIT）
-- **鲸群** = 本项目
+## 三方结构
 
-本文分两部分：**A. 三方能力矩阵**（一眼看差在哪）；**B. 差集清单**（① 有、鲸群没有的，逐条给结论：已实现 / 近似实现 / 留待以后，附落点与做法）。
+| 能力 | whale | scroll | 本项目及边界 |
+| --- | --- | --- | --- |
+| 单轮运行 | 宿主 `sessionController` | 子进程 headless DSH | 沿 whale；使用 create 返回的实际 ID，prompt accepted 仅指收到请求，不是执行完成 |
+| 设置形态 | 已有原生 `settings.section` | 原生设置区及插件面板 | 沿 whale 原生 section（设置 → 鲸群），不是从独立 HTML 改造 |
+| 登录 | 手动 cookie | 扫码、手动、登录状态 | Node 扫码/轮询、手动导入与凭据复用；取消按 requestId 隔离旧轮询；真实扫码未验 |
+| 作息 | 固定窗口、随机跳过 | 峰谷、中午/夜间开关 | 默认 fixed，可选 tide；跨午夜保留所有交集，拆段不增加总 wakes |
+| 回复 | 评论、主人互关私信 | 评论回复、DM 投递 | 所有回复默认审核，可关；包括主人，不能用 `--reviewed` 自批 |
+| 「评论复合」 | 无新增复核机制 | 发出后查评论 | 解释为发后复核；字符串 rpid、次数/间隔、有界公平重试；本人登录观察非全网公开证明 |
+| 日记与上下文 | 自己/给主人两篇日记 | 日报、章程 | daily/owner 分离、分类记录+索引、月度归档；人设+今日+记录路径实际进入唤醒提示；默认不读旧归档 |
+| 账本 | 日志 | 章程 hash 台账、日报 | rounds Markdown、prev 链、稳定 operationId；本地完整性线索，不保证防篡改或对外 exactly-once |
+| 产出 | 视频处理材料 | 日报及转写材料 | artifacts 默认关，独立字幕/封面也受同一开关约束；不禁止必要日记、账本、凭据/状态文件 |
+| 权限 | 既有 CLI | 模型 MCP 白名单 | CLI scope 命令策略；active 自动轮 4 小时过期拒写，只读可用；不是模型工具隐藏或系统沙箱 |
+| 扩展 | 在原结构扩展源码 | MCP/脚本结构 | fields/prompts/commands/routes/11 个实际事件，支持启停/清理/失败回滚；可信 Node 代码，不自动变成 MCP |
+| 通知、直播及既有写能力 | 通知、动态/图文、直播弹幕等 | 部分评论/私信/投稿工具 | 沿 whale；未为凑对照新增投稿、任意 UID 私信或真实互动 |
 
----
+证据入口：[调度与原生会话](../lib/scheduler.js#L227)、[设置 section](../lib/client.js#L984)、[扫码服务](../lib/index.js#L273)、[CLI 权限](../lib/scope.mjs#L83)、[扩展契约](../extensions/README.md)。
 
-## A. 三方能力矩阵
+## 原公开工具逐项映射
 
-| 能力 | 基座 whale | ① scroll | 鲸群 pod | 说明 |
-|---|---|---|---|---|
-| 登录方式 | 手动 F12 抠 cookie | 扫码 + 手动 | **扫码 + 手动** | 鲸群二维码是内联 SVG + 终端 ASCII，不依赖 python |
-| 一轮怎么跑 | `sessionController` 唤醒会话 | 子进程跑 headless `dsh` | **`sessionController`**（同基座） | 按需求「一轮运行方式采用基座」 |
-| 设置界面 | 自有 `settings.html` 网页 | 原生 `settings.section` | **原生 section（「鲸群」）** | 按需求「设置用基座」；独立网页已删 |
-| 作息 | 固定窗口 | 峰/谷时段（12–14 谷、18–09 夜） | **固定窗口 或 峰谷（可切）** | `night.mode = fixed \| tide`，默认 fixed |
-| 发评论 | 直接发 | 可选自动评论 | **可选自动评论 + 发前审核（默认开）** | 审核开着时非主人的回复必须先落草稿 |
-| 发出后复核 | 无 | 有（`x/v2/reply/main`） | **有（同 ① 的思路）** | 措辞只有「公开可见 / 没查到」 |
-| 日记 | 两篇 md（公开 + 私密） | `out/<date>.md` 日报 | **文件夹：daily/ owner/ records/ archive/ + INDEX** | 按需求 9 |
-| 章程 | 无 | `duty.md` + sha256 台账 | **无章程**；换成「人设 + 记录库」 | 按需求 10 |
-| 账本 | 无（只有 `pod-log.jsonl`） | duty 台账 + 日报 | **哈希链账本（rounds/ + verify）** | 按需求 13，按 ① 仿制并升级为 prev 链 |
-| 产生文件 | 日记 / 日志 | `out/` 日报 | **artifacts（默认关）** | 按需求 12 |
-| 权限收敛 | 无（工具链全开） | 每轮 MCP 工具白名单 | **权限单 `scope.json`**（命令级，4h 过期） | 近似实现 ① 的白名单 |
-| 扩展机制 | 无（改源码） | 无 | **mod 宿主（11 事件 + fields/routes/commands/提示段）** | 按需求 6 |
-| 通知 | file/desktop/dm/webhook/command | 无独立通知 | **同基座 + 测试按钮** | |
-| 语音转写 | 无 | 本地 Whisper（~1GB） | **无（用字幕）** | 见 B-4 |
-| Python / uv 自举 | 无（纯 JS） | 有 | **无（纯 JS，零第三方依赖）** | 见 B-1 |
-| 私信 | 有（只给主人、互粉） | 有（dmMode）+ 可选自动 | **同基座** | 三条红线不接受覆盖 |
-| 弹幕 / 直播 | 有 | 无 | **同基座** | |
-| 行情 | 有（动态 / 图文动态） | 无 | **同基座** | |
+原 scroll 的 `vendor/bilibili-mcp/mcp_server.py` 有 **27 个**公开 `bili_` 函数，准确拆分为 **3 个登录/凭据 + 24 个业务**。完整 27 行、参数/输出差异与协议来源在[只读 CLI 对照](readonly-cli.md#L45)，不能用本项目 CLI 命令数量替代等价性：
 
----
+| 原函数组（均为 bili_ 前缀） | 本项目入口 | 实际差异 |
+| --- | --- | --- |
+| login / login_check / check_credential | `login`、内部轮询、`session` / `login status` | 非原 MCP 两阶段 schema，无单独同名 check 工具 |
+| search / comments / subtitle / danmaku / video_info | `search`、`comments`、`subtitles`、`video`、`covers` | 官方字幕无 ASR；video 的 XML 弹幕预览前 20 条，不能把直播 `danmaku` 当视频弹幕工具 |
+| reply / send_dynamic / send_opus / send_message | `comment`、`dynamic post`、`dynamic-image`、`dm` | 沿既有受限写路径；图文不是完整 opus 富文本编排；私信只限主人且互关，不等于任意 receiver_uid |
+| crawl | `search` 后对选中 BV 分别读 `comments` + `subtitles` | 可组合，没有原 max_videos 单条批采及汇总 JSON；单视频 `debrief` 不是批采等价物 |
+| upload_video / upload_video_multi / video_zones | 未支持 | 单 P/多 P 投稿是新写能力；旧静态分区表不能冒充当前上传分区 |
+| hot_videos / hot_buzzwords / weekly_hot / rank | `popular`、`buzzwords`、`weekly`、`rank` | 热词图鉴不是搜索热搜；weekly 省略期号读列表；rank 支持原 V2 分类，不接受无效 day 参数 |
+| user_info / user_videos | `user-info`、`user-videos` | info/upstat/relation 聚合任一失败整体报错；投稿分页/关键词/排序；WBI2/access-id 自动获取未支持 |
+| favorite_lists / favorite_content | `fav-remote folders` / `contents` | 远端数据，不是本地 `fav --list`；必须显式 mid，不支持原 uid=0 推断快捷语义 |
+| unread_messages / received_replies / received_at_and_likes | `messages unread/reply/at/like/all`、既有 `comment-digest` | messages 每类一页、API data 输出，like/likes 键及聚合格式不同；摘要可用已有 pages 参数 |
 
-## B. 差集清单：① 有、鲸群没有的
+本轮补齐轻量只读聚合：热门、热词图鉴、周榜、排行、用户资料/投稿、远端收藏夹/内容及消息。来源固定为 `bilibili-api-python 17.4.1` 发布定义，见[协议索引](reference/bilibili-api-17.4.1-readonly.md)；未安装 Python 依赖，未以真实请求证明今天仍可用。假网络只证明派发、参数、错误传播与输出行为。公开类可匿名尝试，消息需已有凭据，服务端权限与风控仍可能拒绝。
 
-### 已实现（照 ① 做的）
+## scroll 设置和操作对照
 
-| 能力 | 落点 |
-|---|---|
-| 扫码登录 | `lib/login.mjs` + `lib/qr.mjs` + `GET /login/qr`、`GET /login/poll` + 设置页「登录」面板 + `bili.mjs login` |
-| 峰谷时段 | `lib/tide.mjs` + `night.tide` 配置 + 设置页 `TideEditor` + `POST /tide/preview` + `bili.mjs tide` |
-| 发出后复核 | `lib/verifycomments.mjs` + `tools/commands/verify-now.mjs` + `verifyTick`（5 分钟一扫，间隔/条数可配）+ `POST /verify` |
-| 哈希链账本 | `lib/ledger.mjs`（`prev` = 上一份全文 sha256）+ `tools/commands/ledger.mjs` + `GET /ledger`、`POST /ledger/verify` + `ledgerModeFor` 分 mode |
-| 产出物（类似 `out/`） | `tools/commands/artifacts.mjs` + `artifacts.enabled`（默认关） |
-| 工具白名单思路 | `lib/scope.mjs`（权限单，命令级）—— 粒度不同，见下 |
+原字段以原项目 `index.js:49–90`、默认对象 `index.js:198–200` 与 `client.js:370–575` 为本轮本地读取证据；它们不随本包分发。本项目落点为[默认/归一](../lib/defaults.mjs#L15)、[设置字段](../lib/client.js#L62)、[提示生成](../lib/scheduler.js#L82)。同名或相似设置不代表限制完全相同。
 
-### 近似实现（思路对上了，做法不同）
+| 原设置/操作 | 本项目对应 | 差异与决定 |
+| --- | --- | --- |
+| perDay 每日挑选 5 条 | `night.maxVideos` 每轮上限、`quota.shareDaily` 默认每日分享 3 条 | 挑选与分享口径不同，没有同语义的全日挑选计数；需要时先明确计数对象再实现，不拿分享额度冒充 |
+| peakValley、noon、night | `night.mode`、fixed windows 或 `night.tide` | 时段可配，非照搬两个固定开关；tide 可关闭 |
+| autoComment、mentionName | `share.enabled`、`owner.mid/name`、`share.via=comment` | 分享评分、理由、去重仍有效；不是自动给任意人发评论 |
+| dmMode off / only / both、dmUid | `share.via=comment/dm/both`、`owner.mid` | both 为已接受公开分享的一次同正文/BV DM 续送，只记一次分享额度；主人互关限制保留 |
+| transcribe、asrModel | 无 | 未装 Whisper/模型；字幕优先，必要时开启 artifacts 用抽帧/硬字幕图辅助，不能声称完整听懂无字幕视频 |
+| commentPerRound、replyPerRound | 同名，0–20 / 1–10 | UI→保存→配置→真实 CLI/prompt 已接线；预算主要靠 agent 遵循，0 评论另撤销自动评论权限，不是逐次硬计数沙箱 |
+| replyToComments | 新/空配置默认 false | 旧 raw 明确 listen.comment=true 且缺新字段时迁移 true，显式新值优先；只回复 target_id 匹配已记录本人 rpid 的直接回复，不消费 @ 或无法归属通知，不是楼层深度开关 |
+| keywords | `preferences.keywords` | 实际进入 feed/唤醒；章程不再作为默认关键词来源 |
+| 搜索工具 order 参数 | `search.order` 设置与 `search --order` | 默认 totalrank，可选 click/pubdate/dm/stow/scores；CLI 显式值优先，非法值拒绝；不是全局 feed 排序或热门榜切换 |
+| pythonPath、dshBin、headlessProfile、overlayMcp | 无同名配置 | 采用原生会话+Node CLI；`toolsPath` 不是 Python/headless/MCP 叠加配置的等价物 |
+| workspace | 宿主专用工作目录及 `diary.dir` | 会话 cwd 与提示绝对路径由宿主解析；没有相同 headless 工作区字段 |
+| reportLevel full / brief / off | 同名、默认 full | 控制可选报告/摘要推送；off 不关闭日记、记录和账本，不等于原 off 完全不写日报 |
+| favFolderId、收藏夹下拉 | 同名 ID 输入、`fav --folder` | 只使用本人收藏夹，空值沿用默认夹；原 0 是不开自动收藏，语义不同；没有远端列表驱动的设置下拉 |
+| fav-today 补收藏今天 | 无自动补收藏/日报侧车 | agent 当场判断后调 `fav`；理由/日限/30 天去重保留；不能说与宿主自动解析日报收藏完全等价 |
+| 人设/章程、工作区资料 | `persona.md` + 今日日记 + records/INDEX/分类记录 | 实际提示路径已修；不创建新的 duty.md 核心，不保证模型每次都读完全部文件 |
+| 扫码、手动登录、状态/依赖检查 | 登录面板、`login/session/deps/selftest`、状态面板 | 真实 DSH UI、账号登录及依赖体检未在本轮执行，不能把离线 fixture 当实机通过 |
+| 检查更新按钮 / update | 无 | 未增加版本抓取/安装器；需手动核对可信发布与 SHA，再决定升级；本分支 0.5.1 不是 npm/市场发布 |
+| 运行状态/日志 | 设置页状态/计划/账本/日志及事件 | `round:delivered` 是接收；没有可靠 agent 完成事件或失去宿主会话后的自动重建 |
 
-**B-1. 每轮工具白名单（① `mcpWhitelist()`）**
-① 靠「只有 4–6 个 MCP 工具暴露给模型」来控制越权；鲸群没有 MCP，改为**每轮醒来写一张权限单** `pod-work/scope.json`：本轮只放行 `READ_CMDS` + 该轮需要的写命令（默认只有 `fav` / `reply-draft`，分享开时加 `comment`，私信时加 `dm`；`dynamic` / `danmaku` / `comment-del` 必须在设置「写权限」里显式打开）。命令脚本入口 `tools/bili.mjs` 统一查这张单，拒绝时 exit 3。过期（4 小时）自动放行并按手动轮处理；`BILI_POD_SCOPE=off` 可显式绕过（人工批准回复时宿主就是这么绕的）。
-> 想要更细（按工具/按接口而不是按命令）时，做法是把 `scope.json` 从「命令名集合」升级成「命令 + 参数白名单」，落点只在 `lib/scope.mjs:checkCommand()`，其它地方不用动。
+设置页仍有遗留文案：[审核/复核提示](../lib/client.js#L82) 写“回别人”“公开可见”，并把 `verifyIntervalSec` 标为分钟；后端实际是所有回复默认审、本人登录观察、秒单位。接线回归不证明这些提示准确，本轮文档明确揭示，生产文案修复交 controller 判断。
 
-### 留待以后（还没做）
+## 未支持与建议
 
-**B-2. `uv` 自举 + Python 环境**
-① 用 uv 下载一套 python 来跑它自带的 MCP server 和 ASR。鲸群是纯 JS、零第三方依赖（`npm test` 不需要 `npm install`），引入 Python 会毁掉这个性质，所以没做。
-> 要的话建议做成 mod（`pod.dataDir()` 存环境、`pod.command` 暴露入口），不污染主仓。
+| 未支持/无法验证项 | 原因、建议及实现边界 |
+| --- | --- |
+| 本地 ASR、Python/uv 自举 | 重依赖及下载/模型管理不在本次；需要时设计可选独立模块，并先明确安装位置与资源预算 |
+| 真 MCP server、原 `bili_*` 工具 schema | HTTP/CLI 注册不足以实现 MCP；需要独立协议适配、真实模型工具注册及生命周期测试，可用模块接入，不靠命名冒充 |
+| 投稿、多 P、完整 opus/当前分区 | 新对外写入或缺可靠当前协议；后续单独设计权限、去重和账号验收，不为填矩阵直接开放 |
+| 原批采、日报侧车/全日挑选数、收藏夹下拉、补收藏今天 | 组合读取/当场 fav 只部分覆盖；确需原语义时分别补聚合、计数和 UI，不把近似入口标等价 |
+| 搜索热搜、WBI2/access-id 自动获取、原输出 schema | 热词图鉴与热搜不同；用户接口只接受显式 w_webid；先查当前原始协议证据，再单独扩充 |
+| PNG 二维码 | 当前 SVG/终端字符已经支持登录用途；确需 PNG 导出可独立增加，不为显示而添依赖 |
+| 自动更新、真实宿主/真实网络/真实发送、完整视频观看 | 本轮没有相应执行证据；按精确交付 SHA 后续可回滚加载与最小验证；不覆盖运行中安装 |
+| GitHub fork 血缘、发布推送与调度终结 | fork 前置要求未满足；不能删仓造历史。分支发布和最终调度终结由 controller 核实，本文不是完成证明 |
 
-**B-3. 内置 MCP server + 30 多个 `bili_*` 工具**
-① 的主体就是 MCP server。鲸群走 `bili.mjs` 命令族（30 条）+ 权限单，功能和它基本重合（搜索/字幕/评论/信息/回复/私信/动态/收藏/投稿相关除外）。
-> 真的需要 MCP 形态时，写一个 mod 在 `setup(pod)` 里 `pod.route()` + `pod.command()` 就能对模型暴露 `bili_*` 名字。
+核心缺陷直接修在生产路径，新增接口保持模块化；不能把日记幂等、发送审批或扫码竞态塞进未默认加载的 mod 来回避核心修复。扩展运行的是可信 Node 代码，8 秒超时不能隔离同步死循环、直接 IO 或撤销副作用。
 
-**B-4. 本地 Whisper 语音转写（约 84 MB / 装完 ~1 GB）**
-① 用来「听懂视频」。鲸群走「字幕优先 + `debrief` 通读」，没有字幕的视频只能靠标题/简介/评论判断。
-> 这是清单里**最影响能力上限**的两项之一。要做：mod 里 `pod.command('asr')` 调 `yt-dlp`+`whisper.cpp`（可复用 `tools/lib/ffmpeg.mjs` 找二进制的逻辑），把转写文本喂给 `video-content`。
-
-**B-5. 二维码 PNG 图片**
-① 用 `qrcode[pil]` 生成 PNG 给网页显示。鲸群直接出内联 **SVG**（设置页）+ 终端 ASCII（CLI），少一个依赖、少一次磁盘写。
-
-**B-6. `duty.md` 章程 + sha256「章程升级台账」**
-按需求 10 明确不要章程。等价物：`~/.bili-ai/persona.md`（人设，只有她能改）+ `pod-diary/records/`（从日记里提炼的长期记录库）。`ledger` 的哈希链正好接管了「防篡改」这件事，只是对象从章程变成每轮流水。
-
-**B-7. 子进程 headless 跑一轮**
-① 用 `spawn(dsh --profile headless --patch …)`（因此有「desktop NEXT 自动跑会挂」的老问题）。鲸群按需求 3 用基座的 `sessionController`，没有这个问题。
-
-**B-8. `fav` 侧车脚本（`lib/favops.py`）**
-① 在一轮结束后解析日报里的 `### BV` 自动收藏；鲸群把「收藏」放进醒来协议第 5 步（判据：3 个月后还想点开 / 理由 ≥6 字 / 同日 ≤3 / 同视频 30 天一次），由她自己判断并调 `bili.mjs fav`。能力等价，触发点不同（她当场判断 vs 事后解析报告）。
-
-**B-9. 楼中楼「回复的回复」单独开关**
-① 有 `replyToComments` 单独控制是否回复别人的楼中楼。鲸群用 `listen.oncePerPerson` + 发前审核覆盖了同类风险（同一人只回一次、非主人回复必须过审），但没有「只回楼中楼/只回主楼」的细分开关。
-> 需要时：`listen` 里加 `depth: 'root' | 'sub' | 'both'`，落点 `lib/scheduler.js:listentick` 的过滤条件。
-
----
-
-## C. 维护这份清单的约定
-
-- ① 升级新能力时，先在这里登记一行（能力 / 是否做 / 落点），再动代码 —— 免得「能力对照」散在聊天记录里。
-- 「留待以后」的四项按影响排序：**B-4 ASR > B-9 楼中楼细分 > B-3 MCP 形态 > B-2 uv**。
+配置合并边界：[mergeDeep](../lib/defaults.mjs#L75) 消费 defaults、JSON 配置及持久化 patch；[writeConfig](../lib/store.mjs#L68) 不接收 `applyTide` 的运行时函数对象。`applyTide` 产生的 `skipChanceFor` 只用于 planner/inWindow/preview，当前没有回灌路径，因此未扩修通用函数克隆。以后若把函数传入 writeConfig，仍可能抛 `DataCloneError`，调用者应提取可持久化 JSON 字段。
