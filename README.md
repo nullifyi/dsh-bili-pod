@@ -182,7 +182,7 @@ node <插件目录>/tools/bili.mjs selftest
 > `comment` 默认随 `review.verify` 在发送记账完整后立即查一次，`--verify` 可显式要求查询；后台复核不会重发评论。发送结果 `uncertain` 或本地记账不完整时需人工核对，不能靠再次发送修复。
 > 手动查：`node tools/bili.mjs verify`（或 `verify --rpid 123456`）。
 
-当前设置页的审核/复核提示仍有旧措辞，且把 `verifyIntervalSec` 错标为分钟；实际配置按秒生效，以本节和验收记录中的后端行为为准。
+`verifyIntervalSec` 按**秒**生效（0.6.2 起设置页标注已改为秒）。
 
 ---
 
