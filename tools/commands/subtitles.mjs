@@ -13,6 +13,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { dshPath } from '../lib/paths.mjs'
+import { config } from '../lib/config.mjs'
 
 
 const argv = process.argv.slice(2)
@@ -96,16 +97,19 @@ if (!body.length) { console.error('字幕 JSON 里 body 是空的'); process.exi
 console.log(`字幕行数: ${body.length}   覆盖 ${fmt(body[0].from)} → ${fmt(body.at(-1).to ?? body.at(-1).from)}`)
 
 const outDir = typeof opt.out === 'string' ? opt.out : dshPath('shots', 'subs')
-fs.mkdirSync(outDir, { recursive: true })
-const base = path.join(outDir, `${bvid}-${pick.lan}`)
-fs.writeFileSync(base + '.json', rawText)
-fs.writeFileSync(base + '.txt', `${title}\n${view.data.owner.name}  ${bvid}  ${duration}s\n\n` +
-  body.map((l) => `[${fmt(l.from)}] ${l.content}`).join('\n'))
-fs.writeFileSync(base + '-plain.txt', body.map((l) => l.content).join('\n'))
-console.log(`\nJSON : ${base}.json（原始）`)
-console.log(`TXT  : ${base}.txt（带 [mm:ss] 时间戳，适合复述成时间线）`)
-console.log(`PLAIN: ${base}-plain.txt（纯文本，适合直接喂模型）`)
+const enabled = config().artifacts?.enabled === true
+if (enabled) {
+  fs.mkdirSync(outDir, { recursive: true })
+  const base = path.join(outDir, `${bvid}-${pick.lan}`)
+  fs.writeFileSync(base + '.json', rawText)
+  fs.writeFileSync(base + '.txt', `${title}\n${view.data.owner.name}  ${bvid}  ${duration}s\n\n` +
+    body.map((l) => `[${fmt(l.from)}] ${l.content}`).join('\n'))
+  fs.writeFileSync(base + '-plain.txt', body.map((l) => l.content).join('\n'))
+  console.log(`\nJSON : ${base}.json（原始）`)
+  console.log(`TXT  : ${base}.txt（带 [mm:ss] 时间戳，适合复述成时间线）`)
+  console.log(`PLAIN: ${base}-plain.txt（纯文本，适合直接喂模型）`)
+}
 
-const n = Number(opt.print ?? 12)
-console.log(`\n--- 前 ${n} 行 ---`)
+const n = enabled ? Number(opt.print ?? 12) : body.length
+console.log(enabled ? `\n--- 前 ${n} 行 ---` : '\n--- 产出物已关闭；完整字幕仅输出到标准输出 ---')
 for (const l of body.slice(0, n)) console.log(`[${fmt(l.from)}] ${l.content}`)

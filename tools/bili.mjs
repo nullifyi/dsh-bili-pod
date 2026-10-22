@@ -27,7 +27,7 @@ const map = {
   'comment-digest': ['commands/comment-digest.mjs', '今天谁找过人家（回复+@ 两个收件箱汇总，只读）：--hours 24 --pages 2 [--only-unread]'],
   recon: ['verify/dryrun.mjs', '发评论前的侦查：BV→aid + 评论区状态 + WBI 材料'],
   video: ['commands/video-content.mjs', '不点开视频也能还原它讲什么（读文字：简介/字幕/弹幕/评论）'],
-  subtitles: ['commands/subtitles.mjs', '拉官方字幕全文（WBI 签名，带时间戳）：<BV> [--lan ai-zh] [--print N] —— 看视频最省的一条腿'],
+  subtitles: ['commands/subtitles.mjs', '官方字幕全文：<BV> [--lan ai-zh] [--out 目录] [--print N]；artifacts开启才写文件，关闭则stdout全文'],
   'watch-video': ['commands/bili-watch.mjs', '真"看"视频：取直链 → 下载 → ffmpeg 抽帧拼九宫格 → 交给 read_image：<BV> [3x3|4x4] [--uniform]'],
   debrief: ['commands/debrief.mjs', '看懂一条视频（一条龙）：封面+简介+官方字幕+弹幕热区(对齐字幕)+热评+画面抽帧：<BV> [--bucket 30] [--top 5] [--grid 3x3] [--no-frames]'],
   comments: ['commands/comments.mjs', '热评 / 最新评论（只读，匿名可读）：<BV> [--ps 20] [--pn 1] [--sort hot|time] [--json]'],
@@ -47,7 +47,15 @@ const map = {
   notify: ['commands/notify.mjs', '通知分发（后端 stdout/file/webhook/command，由 config.notify 决定）'],
   night: ['commands/pod-night.mjs', '生物钟（旧的 CLI 版）：plan / clock / mark / status —— 插件里由宿主调度，一般不用手动跑'],
   search: ['commands/search.mjs', '按关键词搜视频（WBI 签名）：标题/UP/播放/简介/标签'],
-  covers: ['diagnostics/fetch-covers.mjs', '抓视频元信息 + 封面图存到 covers/（供看图理解内容）'],
+  popular: ['commands/readonly.mjs', '热门视频（只读）：--pn 1 --ps 20 [--json]', 'popular'],
+  buzzwords: ['commands/readonly.mjs', '热词图鉴（非搜索热搜）：--pn 1 --ps 20 [--json]', 'buzzwords'],
+  weekly: ['commands/readonly.mjs', '每周必看：期数列表 / --number 期号 [--json]', 'weekly'],
+  rank: ['commands/readonly.mjs', '视频排行：--type all|original|rookie|technology… [--json]；无day过滤', 'rank'],
+  'user-info': ['commands/readonly.mjs', '用户资料/投稿统计/关系统计：<mid> [--w-webid id] [--json]', 'user-info'],
+  'user-videos': ['commands/readonly.mjs', '用户投稿：<mid> [--pn 1 --ps 30 --order pubdate|click|stow --keyword 词] [--json]', 'user-videos'],
+  'fav-remote': ['commands/readonly.mjs', '远端收藏：folders <mid> / contents <media_id> [--pn 1 --order mtime|view|pubtime] [--json]', 'fav-remote'],
+  messages: ['commands/readonly.mjs', '消息聚合（只读）：[unread|reply|at|like|all] [--json]；每类一页', 'messages'],
+  covers: ['diagnostics/fetch-covers.mjs', '抓视频元信息；artifacts开启才落盘封面：<BV>… [--out 目录]'],
   whois: ['diagnostics/whois.mjs', '按 mid 查昵称（@ 人前先核准名字）'],
   // —— 写（会真的发出去；都必须显式 --dry 或 --go） ——
   'dm-await': ['commands/dm-await.mjs', '私信监听（只认主人；命中打印 DM_HIT）'],
@@ -142,6 +150,6 @@ if (!entry) {
     process.exit(2)
   }
 }
-const r = spawnSync(NODE_EXE, [script, ...(entry ? translateNamed(cmd, rest) : rest)], { stdio: 'inherit' })
+const r = spawnSync(NODE_EXE, [script, ...(entry?.[2] ? [entry[2]] : []), ...(entry ? translateNamed(cmd, rest) : rest)], { stdio: 'inherit' })
 await modHost?.close()
 process.exit(r.status ?? 1)

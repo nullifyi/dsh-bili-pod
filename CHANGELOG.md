@@ -1,3 +1,10 @@
+## v0.5.1（2026-10-22）· 审查分支交付
+
+- 新增轻量 Node 只读 CLI：`popular`、`buzzwords`（热词图鉴）、`weekly`、`rank`、`user-info`、`user-videos`、`fav-remote`、`messages`。支持明确的分页/排序参数、JSON 输出、API 错误退出及 scope 只读注册；API 来源与原 scroll 27 个公开函数的逐项差异见 [只读 CLI 文档](docs/readonly-cli.md)。
+- 独立 `subtitles`、`covers` 遵守 `artifacts.enabled`：关闭时不建产出目录、不写文件，字幕全文输出到 stdout，封面仅返回 URL；开启时才写出。封面默认目录移到 DSH 数据目录的 `shots/covers`，可用 `--out` 指定。
+- 提取现有搜索的 WBI 签名供新增只读命令复用；保留原搜索排序校验。本地验证使用真实 CLI、严格假 fetch 和临时用户目录，不代表当前在线接口或 WBI2/access-id 已通过验证。
+- 包版本更新为 `0.5.1`，用于区分原 `0.5.0` 安装与本次修复包；未发布或修改真实安装。此前验收修复的完整记录由交付验收文档说明。
+
 ## v0.5.0（2026-10-22）· 鲸群
 
 fork 自 `dsh-bili-whale@0.4.0`（MIT）。基座那套「生物钟 + 克制 + 两本日记」原样保留，
