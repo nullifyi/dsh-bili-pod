@@ -272,6 +272,16 @@ test('mistress: normalisation, warnings and role separation', async () => {
   assert.ok(same.some((w) => w.includes('一样')))
   const off = normalizeConfig({ mistress: { enabled: true, mid: '' } }).config
   assert.equal(off.mistress.mid, '')
+
+  // 2026-10-22 追加：她发来的消息必须回，且回信不占「主动私信」额度（另有自己的日上限）
+  const d = normalizeConfig({}).config.mistress
+  assert.equal(d.replyAlways, true)
+  assert.equal(d.replyMaxPerDay, 6)
+  assert.equal(d.splitLong, true)
+  assert.equal(d.styleNotes, '')
+  const clamped = normalizeConfig({ mistress: { replyMaxPerDay: 99, replyAlways: false } }).config.mistress
+  assert.equal(clamped.replyMaxPerDay, 30)
+  assert.equal(clamped.replyAlways, false)
 })
 
 test('taste: selfAdjust and learnFromInterest default on, and survive merge', async () => {

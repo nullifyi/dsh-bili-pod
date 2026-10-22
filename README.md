@@ -154,6 +154,11 @@ node <插件目录>/tools/bili.mjs selftest
 | 对话语气 | 正常 | **尽量奉承**（提示词明确要求；但钱 / 账号 / 线下事一律请示主人） |
 | 流水 | `pod-log.jsonl` | `pod-log.jsonl` 的 `mistress-share` |
 
+**她的消息必须回（0.7.1）**：`mistress.replyAlways`（默认开）—— 她发来的私信不适用「每天一次主动私信」的额度，
+回信另有上限 `mistress.replyMaxPerDay`（默认 6）；一条塞不下就分两条（`mistress.splitLong`，每条 ≤300 字）。
+语气可以更亲近、更会夸，但**要具体**、不许承诺钱/账号/线下安排；`mistress.styleNotes` 里可写风格，
+她也会在日记里自己慢慢补 —— 人设是长的，不是一次写完的。
+
 给她交草稿：`reply-draft add --kind dm --to <她的 mid> --message "…" --src <BV>`，主人放行后才会发。
 女主人一旦指向主人的 mid 会被配置校验拦下（两个人必须是两个账号）。
 

@@ -135,6 +135,7 @@ if (TO_ARG) {
   ONLY_TO = TO_ARG
 }
 const IS_MISTRESS = ONLY_TO === MISTRESS_MID
+const REPLY = argv.includes('--reply')   // 回女主人发来的消息：不计主动私信额度，另有回复上限
 const RECIPIENT_NAME = IS_MISTRESS ? String(cfg.mistress?.name ?? cfg.mistress?.title ?? '女主人') : OWNER_NAME
 const MISTRESS_TITLE = String(cfg.mistress?.title ?? '女主人')
 const REQUIRE_MUTUAL = true      // ③ 必须互关
@@ -272,13 +273,21 @@ const loadMQ = () => { try { return JSON.parse(fs.readFileSync(MQ, 'utf8')) } ca
 const saveMQ = (o) => { try { fs.mkdirSync(path.dirname(MQ), { recursive: true }); fs.writeFileSync(MQ, JSON.stringify(o, null, 2) + '\n') } catch { /* 记账失败不重发 */ } }
 const mq = loadMQ()
 const mistressUsed = mq.date === today() ? Number(mq.count ?? 0) : 0
+const mistressReplied = mq.date === today() ? Number(mq.replies ?? 0) : 0
+// 主动私信/分享给她：一天 cfg.mistress.shareDaily 条（默认 1，可改）
 if (IS_MISTRESS && SHARE && !CONTINUATION) {
   const limit = Math.max(0, Number(cfg.mistress?.shareDaily ?? 1))
-  if (limit <= 0) { console.error(`✗ 女主人每天分享上限是 0 —— 去设置里调大，或者这次别分享`); process.exit(4) }
-  if (mistressUsed >= limit) { console.error(`✗ 今天已经给她分享过 ${mistressUsed} 条（上限 ${limit}）—— 明天再聊 ✓`); process.exit(4) }
+  if (limit <= 0) { console.error(`✗ 女主人每天主动私信上限是 0 —— 去设置里调大，或者这次别发`); process.exit(4) }
+  if (mistressUsed >= limit) { console.error(`✗ 今天已经主动给她发过 ${mistressUsed} 条（上限 ${limit}）—— 明天再聊 ✓`); process.exit(4) }
+}
+// 回她的消息：不占主动额度，但也要有个上限防止刷屏（默认 6，可改）
+if (IS_MISTRESS && REPLY) {
+  const cap = Math.max(0, Number(cfg.mistress?.replyMaxPerDay ?? 6))
+  if (cap <= 0) { console.error('✗ 回复女主人上限是 0 —— 去设置里调大'); process.exit(4) }
+  if (mistressReplied >= cap) { console.error(`✗ 今天回她已有 ${mistressReplied} 条（上限 ${cap}）—— 明天再说`); process.exit(4) }
 }
 
-console.log(`[dm] ${meInfo.uname} → ${RECIPIENT_NAME}（mid ${ONLY_TO}）${IS_MISTRESS ? ' · 女主人通道（1 条/天、过审核）' : ''}`)
+console.log(`[dm] ${meInfo.uname} → ${RECIPIENT_NAME}（mid ${ONLY_TO}）${IS_MISTRESS ? (REPLY ? ' · 女主人回复（不占主动额度，过审核）' : ' · 女主人通道（1 条/天、过审核）') : ''}`)
 console.log(`  正文 ${FINAL.length} 字：${FINAL.slice(0, 80)}${FINAL.length > 80 ? '…' : ''}`)
 console.log(`  互关 ✓  ·  今天第 ${(IS_MISTRESS ? mistressUsed : used) + 1} 条（条数不限 ✓ 锁定给 ${RECIPIENT_NAME} ✓）`)
 
@@ -330,7 +339,13 @@ if (r.http >= 200 && r.http < 300 && r.code === 0) {
   try {
     if (IS_MISTRESS) {
       // 女主人的私信单独记账：不占主人的分享额度（她那份上限写在设置里）
-      saveMQ({ date: today(), count: mistressUsed + 1, mid: ONLY_TO, at: new Date().toISOString() })
+      saveMQ({
+        date: today(),
+        count: REPLY ? Number(mq.date === today() ? mq.count ?? 0 : 0) : mistressUsed + 1,
+        replies: REPLY ? mistressReplied + 1 : Number(mq.date === today() ? mq.replies ?? 0 : 0),
+        mid: ONLY_TO,
+        at: new Date().toISOString(),
+      })
       try {
         fs.appendFileSync(path.join(HOME, '.dsh', 'pod-log.jsonl'), JSON.stringify({
           at: new Date().toISOString(), kind: 'mistress-share',
