@@ -110,3 +110,23 @@ test('同一窗口两次醒来之间至少隔 minGapMin（默认 10 分钟）', 
   const second = makePlan(c, historyOf(first, now + 60_000), now + 60_000, () => 0)
   assert.ok(second.atMs - Date.parse(first.wokeAt) >= 10 * 60_000)
 })
+
+test('醒来时间在窗口里均匀分片：5 次不会全堆到深夜', () => {
+  const c = cfg([{ start: '6:00', end: '24:00', wakes: 5 }], 0)
+  const day = '2026-10-22'
+  // 早上 6:00 排第一次 → 落在第一片 [6:00, 9:36)
+  const p1 = makePlan(c, {}, time('22T06:00:00'), () => 0.5)
+  assert.equal(p1.window, '6:00–24:00')
+  assert.ok(p1.atMs >= time('22T06:00:00') && p1.atMs < time('22T09:36:00'), new Date(p1.atMs).toISOString())
+  // 中午 12:00 才开机（一次都没醒）：第一片已经过了 → 落在当前这一片 [12:00, 13:12)
+  const p2 = makePlan(c, {}, time('22T12:00:00'), () => 0.5)
+  assert.ok(p2.atMs >= time('22T12:00:00') && p2.atMs < time('22T13:12:01'), new Date(p2.atMs).toISOString())
+  // 已经醒过一次（07:00）：下一次进第二片 [9:36, 13:12)，不会挤在 07:10
+  const done = completePlan(p1, time('22T07:00:00'))
+  const p3 = makePlan(c, done, time('22T07:10:00'), () => 0)
+  assert.ok(p3.atMs >= time('22T09:36:00') && p3.atMs < time('22T13:12:00'), new Date(p3.atMs).toISOString())
+  // 晚上 20:10 开机：落在第四片 [16:48, 20:24) 的剩余部分
+  const p4 = makePlan(c, {}, time('22T20:10:00'), () => 0)
+  assert.ok(p4.atMs >= time('22T20:10:00') && p4.atMs < time('22T20:24:00'), new Date(p4.atMs).toISOString())
+  void day
+})

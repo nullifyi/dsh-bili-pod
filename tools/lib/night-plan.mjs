@@ -77,8 +77,31 @@ export function makePlan(cfg, state = {}, now = Date.now(), random = Math.random
     break
   }
   if (!picked) return done('今天可用窗口里已经排不下下一次（间隔不够）')
-  const w = picked.cand, from = picked.earliest
-  const atMs = from + Math.floor(random() * Math.max(1, w.endsAt - from))
+  const w = picked.cand
+  // 2026-10-22：**均匀分布**，不要「在整段剩余时间里随便抽一个点」。
+  //   旧写法 atMs = from + random()*(endsAt-from)：窗口 6:00–24:00 排 5 次，
+  //   第一次可能被抽到 23:57 —— 主人看到「说好 6 点到 24 点，怎么快半夜才醒」✗
+  //   现在把窗口按次数切片，第 k 次只在第 k 片里抽（片内再随机），于是 5 次会摊成
+  //   7 点 / 11 点 / 14 点 / 18 点 / 22 点这种节奏；中途才开机也不会把第一次丢到深夜。
+  const used = Number(history.usedCount[w.key] ?? 0)
+  const sliceMs = (w.endsAt - w.startsAt) / Math.max(1, w.wakes)
+  let atMs = null
+  for (let k = Math.min(used, Math.max(0, w.wakes - 1)); k < w.wakes; k += 1) {
+    const sliceStart = w.startsAt + k * sliceMs
+    const sliceEnd = sliceStart + sliceMs
+    const lo = Math.max(now, sliceStart, lastWokeAt + gapMs)
+    const hi = Math.min(sliceEnd, w.endsAt)
+    if (hi - lo < 60_000) continue // 这一片已经过了（或放不下）→ 看下一片
+    atMs = lo + Math.floor(random() * (hi - lo))
+    break
+  }
+  if (atMs == null) {
+    // 今天的片都过去了（比如晚上十点才开机）→ 退回「剩余时间里随机」，至少不丢这一次
+    const lo = Math.max(now, lastWokeAt + gapMs)
+    const hi = w.endsAt
+    if (hi - lo < 60_000) return done('今天可用窗口里已经排不下下一次（间隔不够）')
+    atMs = lo + Math.floor(random() * (hi - lo))
+  }
   const atDate = new Date(atMs), at = atDate.getHours() * 60 + atDate.getMinutes()
   // 峰谷模式：每个窗口可以有自己的跳过概率（lib/tide.mjs 挂的 skipChanceFor）；
   // 固定窗口模式没有这个函数 → 退回原来的全局 skipChance，行为不变。
