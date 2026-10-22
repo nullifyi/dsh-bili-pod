@@ -17,7 +17,7 @@ function sandbox(t,enabled=false) {
   const config=path.join(dsh,'pod.config.json')
   fs.writeFileSync(config,JSON.stringify({artifacts:{enabled},extensions:{enabled:false}}))
   fs.writeFileSync(path.join(work,'scope.json'),JSON.stringify({active:true,at:'2000-01-01T00:00:00Z',allowWrite:[]}))
-  return {...process.env,HOME:home,USERPROFILE:home,DSH_HOME:dsh,DSH_NODE:process.execPath,BILI_POD_CONFIG:config,BILI_POD_WORK:work,BILI_POD_DIARY:path.join(dsh,'diary'),BILI_POD_EXT:path.join(dsh,'ext'),BILI_POD_SCOPE:'',TEST_REQUESTS:path.join(home,'requests.jsonl'),NODE_OPTIONS:'--import='+pathToFileURL(path.join(root,'tests/helpers/readonly-fetch.mjs')).href}
+  return {...process.env,HOME:home,USERPROFILE:home,DSH_HOME:dsh,DSH_NODE:process.execPath,BILI_POD_STATE:path.join(home,'.bili-ai'),BILI_POD_CONFIG:config,BILI_POD_WORK:work,BILI_POD_DIARY:path.join(dsh,'diary'),BILI_POD_EXT:path.join(dsh,'ext'),BILI_POD_SCOPE:'',TEST_REQUESTS:path.join(home,'requests.jsonl'),NODE_OPTIONS:'--import='+pathToFileURL(path.join(root,'tests/helpers/readonly-fetch.mjs')).href}
 }
 function run(env,args) {const r=spawnSync(process.execPath,[path.join(root,'tools/bili.mjs'),...args],{env,encoding:'utf8',timeout:20000});assert.ifError(r.error);return r}
 const requests=env=>fs.existsSync(env.TEST_REQUESTS)?fs.readFileSync(env.TEST_REQUESTS,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse):[]

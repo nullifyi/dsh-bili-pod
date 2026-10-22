@@ -15,10 +15,11 @@ import { apiGet } from '../lib/bili-api.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import { config } from '../lib/config.mjs'
+import { stateFile } from '../lib/paths.mjs'
 
 
 const HOME = (process.env.USERPROFILE || process.env.HOME || '/')
-const FAV_LOG = path.join(HOME, '.bili-ai', 'favorites.json')
+const FAV_LOG = stateFile('favorites.json')
 // 2026-10-21 修（外部审计 #10）：新用户跑 `fav --list` 会因为缺文件直接一脸 ENOENT ✗
 //   改成友好提示：--list 不需要凭据（只读本地账本），其它子命令才要 ✓
 let cred = { sessdata: '', bili_jct: '', buvid3: '' }

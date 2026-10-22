@@ -11,6 +11,7 @@ import path from 'node:path'
 import { config } from '../lib/config.mjs'
 import crypto from 'node:crypto'
 import { dshPath } from '../lib/paths.mjs'
+import { stateFile } from '../lib/paths.mjs'
 
 
 const argv = process.argv.slice(2)
@@ -25,7 +26,7 @@ const POOL = Number(opt.pool ?? 30)
 const HOME = (process.env.USERPROFILE || process.env.HOME || '/')
 const diary = dshPath('pod-diary.md')
 // 2026-10-18：审计表挪到 `~/.bili-ai/` ✓（原来写死作者机器路径 ✗ 换机器就写不进去，静默失效 ✗）
-const audit = path.join(HOME, '.bili-ai', 'commented-videos.md')
+const audit = stateFile('commented-videos.md')
 
 // ── 偏好与"看过"名单：都从日记里读 ──
 let prefs = [...(config().preferences?.like ?? [])]   // 偏好来自统一配置（首选）
@@ -113,7 +114,7 @@ console.error(`[来源] ${SOURCE_HOT === 'all' ? '搜索 + 热门 + 排行 + 关
 // ── 反馈回流（2026-10-20 加，主人定：B 也做）────────────────────────────
 //   feedback.json 里 kind='like' 的事件带 videoTitle → 对被赞视频【标题相似】的候选加权
 //   相似度用字符二元组 Jaccard（中文不用分词也能用 ✓）
-const FEEDBACK = path.join(HOME, '.bili-ai', 'feedback.json')
+const FEEDBACK = stateFile('feedback.json')
 let likedEvents = []
 try {
   const fb = JSON.parse(fs.readFileSync(FEEDBACK, 'utf8'))
@@ -123,7 +124,7 @@ try {
 } catch { /* 没有反馈就零加权 */ }
 const favBVs = new Set()
 try {
-  const fj = JSON.parse(fs.readFileSync(path.join(HOME, '.bili-ai', 'favorites.json'), 'utf8'))
+  const fj = JSON.parse(fs.readFileSync(stateFile('favorites.json'), 'utf8'))
   for (const x of (fj.items ?? [])) if (x?.bv) favBVs.add(x.bv)
 } catch {}
 const likedBVs = new Set()
@@ -154,7 +155,7 @@ try {
   // 她自己收藏过的（favorites.json）也算"品味信号" ✓ 和"被赞过的"并列
   let favItems = []
   try {
-    const fj = JSON.parse(fs.readFileSync(path.join(HOME, '.bili-ai', 'favorites.json'), 'utf8'))
+    const fj = JSON.parse(fs.readFileSync(stateFile('favorites.json'), 'utf8'))
     favItems = (fj.items ?? []).filter((x) => x && x.bv)
   } catch {}
   const learnedTokens = [...new Set([

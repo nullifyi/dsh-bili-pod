@@ -21,9 +21,10 @@ import { fileURLToPath } from 'node:url'
 import { NODE_EXE } from '../lib/nodebin.mjs'   // 2026-10-21：别用 process.execPath（Electron 里它是主程序 ✗）
 import { withFileLock, readJson, atomicJson } from '../../lib/file-state.mjs'
 import { config } from '../lib/config.mjs'
+import { stateFile } from '../lib/paths.mjs'
 
 const HOME = process.env.USERPROFILE || process.env.HOME || '.'
-const FILE = path.join(HOME, '.bili-ai', 'pending-replies.json')
+const FILE = stateFile('pending-replies.json')
 
 const argv = process.argv.slice(2)
 const cmd = argv[0]

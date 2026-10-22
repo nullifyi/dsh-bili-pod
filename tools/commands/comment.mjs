@@ -18,8 +18,11 @@ import { config } from '../lib/config.mjs'
 import { validateShare } from '../lib/share-policy.mjs'
 import { NODE_EXE } from '../lib/nodebin.mjs'   // 2026-10-21：别用 process.execPath（Electron 里它是主程序 ✗）
 import { recordSent } from '../../lib/verifycomments.mjs'
-import { checkApproval, beginSend, finishSend, coordinates } from '../../lib/comment-state.mjs'
+import { checkApproval, beginSend, finishSend, coordinates, addDraft } from '../../lib/comment-state.mjs'
+import { reviewDecision, reserveAuto, settleAuto } from '../../lib/policy.mjs'
+import { STATE_DIR } from '../lib/paths.mjs'
 import { withFileLock, atomicJson } from '../../lib/file-state.mjs'
+import { stateFile } from '../lib/paths.mjs'
 
 // ── 限额闸（B 档「限额自主」的代码强制部分，2026-10-14 主人选 B 档）────────────────
 // 语义：闸门**只管自主发言**（带 --auto，即"她自己决定说的"）；主人当场授权的发言不拦 ✓
@@ -36,7 +39,7 @@ const ONCE_DAYS = 30
 //   --verify   发完立刻复核「本人登录可见没有」（默认跟随 config.review.verify）
 //   --approval / --operation-id 由宿主签发并绑定正文和坐标，消费一次
 const VERIFY = process.argv.includes('--verify') || config().review?.verify !== false
-const REPLIED = path.join(process.env.USERPROFILE || process.env.HOME || '.', '.bili-ai', 'replied.json')
+const REPLIED = stateFile('replied.json')
 const loadReplied = () => { try { return JSON.parse(fs.readFileSync(REPLIED, 'utf8')) } catch { return { byUid: {} } } }
 // 查出"被回复的那个人"是谁（reply/reply 里 rpid === parent 的那条的作者）
 async function parentAuthor(aid, rootRpid, parentRpid) {
@@ -51,6 +54,23 @@ async function parentAuthor(aid, rootRpid, parentRpid) {
     if (!list.length) break
   }
   return null
+}
+
+// 「她 → 对方」与「对方 → 她」的关注关系（auto-quiet 档要看这个；查不到就按 unknown 处理 = 不自动发）
+async function relationOf(mid, cookie) {
+  if (!mid) return 'unknown'
+  try {
+    const j = await (await fetch(`https://api.bilibili.com/x/relation?fid=${encodeURIComponent(String(mid))}`, {
+      signal: AbortSignal.timeout(8000),
+      headers: { 'user-agent': 'Mozilla/5.0', referer: 'https://www.bilibili.com/', cookie },
+    })).json()
+    if (j.code !== 0) return 'unknown'
+    const out = Number(j.data?.attribute ?? -1)
+    const back = j.data?.be_relation?.attribute == null ? null : Number(j.data.be_relation.attribute)
+    if (out === 6 || back === 6) return 'mutual'
+    if (back !== null && [2, 6].includes(back)) return 'fan'
+    return 'none'
+  } catch { return 'unknown' }
 }
 const quota = (args) => {
   try {
@@ -150,11 +170,8 @@ if (SHARE) {
 
 const draft = coordinates({ oid, type, root, parent, message })
 const approval = { operationId: args.get('operation-id'), token: args.get('approval') }
-const needsApproval = config().review?.preReview !== false && !!(root || parent)
-if (!dry && ((needsApproval || approval.token) && !checkApproval(draft, approval))) {
-  console.error('[审核] 需要宿主批准的同坐标、同正文一次性凭据；--reviewed 不能代替审核。')
-  process.exit(7)
-}
+// 0.7.0：是否需要先问主人，交给 lib/policy.mjs 统一决策（在这里先定义，真正的判定放到拿到 cookie 之后）
+const REVIEWED = args.get('reviewed') === true || args.has('reviewed')
 
 // "同一个人只回一条"（可选 · 2026-10-17 加）：只在二级回复（--root + --parent）时生效。
 // 用在"只回直接回她的人"那条流程里 → 同一个人 30 天内不会被回第二次（防拉锯、防被当聊天机器人）。
@@ -208,6 +225,34 @@ if (!cred.buvid3 || String(cred.buvid3).trim() === '') {
 const cookieHeader = `SESSDATA=${cred.sessdata}; bili_jct=${cred.bili_jct}; buvid3=${cred.buvid3}`
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
 const referer = refererArg !== '' ? refererArg : `https://www.bilibili.com/video/${bvid}/`
+
+// ── 发前审核决策（0.7.0 · PLAN §2）───────────────────────────────────
+// 角色必须查出来、不能让 CLI 自报：被回复的人是主人 → owner；否则看关注关系。
+// 档位：ask / auto-owner / auto-quiet / off（见 lib/policy.mjs）。
+const ownerMidForPolicy = String(config().owner?.mid ?? '')
+let policyRole = 'stranger'
+let policyRelationship = 'unknown'
+if (parent && root) {
+  if (!replyAuthor) replyAuthor = await parentAuthor(oid, root, parent)
+  if (replyAuthor?.mid) {
+    policyRole = ownerMidForPolicy && String(replyAuthor.mid) === ownerMidForPolicy ? 'owner' : 'stranger'
+    if (policyRole !== 'owner') policyRelationship = await relationOf(replyAuthor.mid, cookieHeader)
+  }
+}
+// ⚠️ --reviewed 只是「主人已经看过」的注记，**不能**跳过档位判定；
+//   宿主批准路径靠的是 approval token（绑定坐标+正文），不是这个旗标。
+// 分享型（--share）不走审核档位：它由 share 闸（理由/评分/配额）自己把关，且公开 @ 主人。
+const policy = SHARE ? null : reviewDecision({ kind: 'comment', role: policyRole, relationship: policyRelationship, share: false, cfg: config() })
+const needsApproval = policy?.required ?? false
+if (!dry && ((needsApproval || approval.token) && !checkApproval(draft, approval))) {
+  console.error(`[审核] ${policy?.reason ?? '需要宿主批准的同坐标、同正文一次性凭据'}`)
+  try {
+    const dr = addDraft({ oid, type, root, parent, message, who: replyAuthor?.name ?? '', bvid: bvid ? String(bvid) : '', topic: '发前审核' })
+    console.error(dr.duplicate ? `  → 同一条草稿已经在待审列表里（id ${dr.item.id}）` : `  → 已转成草稿（id ${dr.item.id}），在设置页审核后再发`)
+  } catch (e) { console.error(`  → 存草稿失败：${String(e.message).slice(0, 120)}`) }
+  process.exit(7)
+}
+if (policy) console.log(`[审核档] ${policy.policy} · ${policy.reason}`)
 
 // ---- WBI signing (harmless if the endpoint does not ask for it) -------------
 const MIXIN_TAB = [46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,33,9,42,19,29,28,14,39,12,38,41,13,37,48,7,16,24,55,40,61,26,17,0,1,60,51,30,4,22,25,54,21,56,59,6,63,57,62,11,36,20,34,44,52]
@@ -283,6 +328,26 @@ if (dry) {
 
 // 判重（--once-per-person）已在入口处检查，这里直接发
 console.log('\n[go] 发送中…')
+
+// 0.7.0：没经过主人手的那条，也要过「自动发送额度」（每天 / 每人）。预留 → 发送 → 结算。
+let autoOpId = null
+if (!needsApproval && !approval.token) {
+  const opId = `comment-${crypto.randomBytes(6).toString('hex')}`
+  const reserved = reserveAuto(STATE_DIR, { opId, kind: 'comment', mid: String(replyAuthor?.mid ?? ''), limits: decisionLimits() })
+  if (!reserved.ok) {
+    console.error(`[自动发送] ${reserved.reason}`)
+    try {
+      const dr = addDraft({ oid, type, root, parent, message, who: replyAuthor?.name ?? '', bvid: bvid ? String(bvid) : '', topic: '自动额度用尽' })
+      console.error(dr.duplicate ? `  → 同一条草稿已在待审列表里（id ${dr.item.id}）` : `  → 已转成草稿（id ${dr.item.id}），在设置页审核后再发`)
+    } catch (e) { console.error(`  → 存草稿失败：${String(e.message).slice(0, 120)}`) }
+    process.exit(4)
+  }
+  autoOpId = opId
+}
+function decisionLimits() {
+  const d = reviewDecision({ kind: 'comment', role: policyRole, relationship: policyRelationship, share: SHARE, cfg: config() })
+  return d.limits
+}
 let operationId
 try { operationId = beginSend(draft, { ...approval, required: needsApproval }) }
 catch (e) { console.error('[审核] ' + e.message); process.exit(7) }
@@ -304,6 +369,7 @@ res = await fetch(url, {
 out = await res.json()
 } catch (e) {
   finishSend(operationId, 'uncertain', { reason: String(e.message).slice(0, 200) })
+  if (autoOpId) settleAuto(STATE_DIR, autoOpId, 'uncertain')
   console.error(`[发送结果不明] operationId=${operationId}；请人工核对，勿重发`)
   process.exit(8)
 }
@@ -313,10 +379,12 @@ if (out.code === 0) {
   const rpid = out.data?.rpid_str ?? out.data?.rpid
   if (!rpid || (typeof rpid === 'number' && !Number.isSafeInteger(rpid))) {
     finishSend(operationId, 'uncertain', { reason: '成功响应缺少精确 rpid' })
+    if (autoOpId) settleAuto(STATE_DIR, autoOpId, 'uncertain')
     console.error(`[发送结果不明] operationId=${operationId}；响应缺少精确 rpid，勿重发`)
     process.exit(8)
   }
   finishSend(operationId, 'accepted', { rpid: String(rpid), code: 0, accountingStatus: 'pending' })
+  if (autoOpId) settleAuto(STATE_DIR, autoOpId, 'accepted')
   console.log(`  ✅ 已发布，评论 rpid=${rpid}`)
   console.log(`  operationId=${operationId}`)
   let accountingComplete = true
@@ -385,6 +453,7 @@ if (out.code === 0) {
   process.exit(0) // P0-6：成功
 } else {
   finishSend(operationId, typeof out.code === 'number' ? 'rejected' : 'uncertain', { code: out.code ?? null, reason: String(out.message ?? '') })
+  if (autoOpId) settleAuto(STATE_DIR, autoOpId, typeof out.code === 'number' ? 'rejected' : 'uncertain')
   const hints = {
     '-101': '账号未登录：cookie 失效',
     '-102': '账号被封停',

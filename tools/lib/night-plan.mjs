@@ -69,15 +69,22 @@ export function makePlan(cfg, state = {}, now = Date.now(), random = Math.random
   //   窗口里放不下就换下一个；都不行就今天到此为止（少醒一次，不把间隔硬压短）
   const lastWokeAt = Number.isFinite(Date.parse(state.wokeAt ?? '')) ? Date.parse(state.wokeAt) : 0
   const gapMs = Math.max(60_000, Math.floor((Number.isFinite(Number(cfg.minGapMin)) ? Number(cfg.minGapMin) : 10) * 60_000))
+  // 2026-10-22 主人反馈：把窗口设成 18:00–18:01、结果抽到「跳过」= 整天白等。
+  //   → 窗口短到塞不下「间隔 + 1 分钟」时（<5 分钟），当成只能醒一次的单点窗口：
+  //     忽略最小间隔，并且**不再掷跳过**（设了窗口就一定醒）。
+  const tiny = w => (w.endsAt - w.startsAt) < 5 * 60_000
   let picked = null
   for (const cand of pool) {
-    const earliest = Math.max(now, cand.startsAt, lastWokeAt + gapMs)
-    if (earliest >= cand.endsAt - 30_000) continue
+    const gap = tiny(cand) ? 0 : gapMs
+    const earliest = Math.max(now, cand.startsAt, lastWokeAt + gap)
+    if (earliest >= cand.endsAt - (tiny(cand) ? 0 : 30_000)) continue
     picked = { cand, earliest }
     break
   }
   if (!picked) return done('今天可用窗口里已经排不下下一次（间隔不够）')
   const w = picked.cand
+  const isTiny = tiny(w)
+  const gap = isTiny ? 0 : gapMs
   // 2026-10-22：**均匀分布**，不要「在整段剩余时间里随便抽一个点」。
   //   旧写法 atMs = from + random()*(endsAt-from)：窗口 6:00–24:00 排 5 次，
   //   第一次可能被抽到 23:57 —— 主人看到「说好 6 点到 24 点，怎么快半夜才醒」✗
@@ -89,7 +96,7 @@ export function makePlan(cfg, state = {}, now = Date.now(), random = Math.random
   for (let k = Math.min(used, Math.max(0, w.wakes - 1)); k < w.wakes; k += 1) {
     const sliceStart = w.startsAt + k * sliceMs
     const sliceEnd = sliceStart + sliceMs
-    const lo = Math.max(now, sliceStart, lastWokeAt + gapMs)
+    const lo = Math.max(now, sliceStart, lastWokeAt + gap)
     const hi = Math.min(sliceEnd, w.endsAt)
     if (hi - lo < 60_000) continue // 这一片已经过了（或放不下）→ 看下一片
     atMs = lo + Math.floor(random() * (hi - lo))
@@ -97,7 +104,7 @@ export function makePlan(cfg, state = {}, now = Date.now(), random = Math.random
   }
   if (atMs == null) {
     // 今天的片都过去了（比如晚上十点才开机）→ 退回「剩余时间里随机」，至少不丢这一次
-    const lo = Math.max(now, lastWokeAt + gapMs)
+    const lo = Math.max(now, lastWokeAt + gap)
     const hi = w.endsAt
     if (hi - lo < 60_000) return done('今天可用窗口里已经排不下下一次（间隔不够）')
     atMs = lo + Math.floor(random() * (hi - lo))
@@ -106,7 +113,7 @@ export function makePlan(cfg, state = {}, now = Date.now(), random = Math.random
   // 峰谷模式：每个窗口可以有自己的跳过概率（lib/tide.mjs 挂的 skipChanceFor）；
   // 固定窗口模式没有这个函数 → 退回原来的全局 skipChance，行为不变。
   const rawSkip = typeof cfg.skipChanceFor === 'function' ? cfg.skipChanceFor(w) : cfg.skipChance
-  const skip = random() < Math.min(1, Math.max(0, Number(rawSkip ?? 0.3)))
+  const skip = !isTiny && random() < Math.min(1, Math.max(0, Number(rawSkip ?? 0.3)))
   return { ...history, action: skip ? 'skip' : 'wake', fired: false, atMs, at,
     atText: `${dayOf(atMs)} ${String(atDate.getHours()).padStart(2, '0')}:${String(atDate.getMinutes()).padStart(2, '0')}`,
     window: w.label, windowKey: w.key, startsAt: w.startsAt, endsAt: w.endsAt,

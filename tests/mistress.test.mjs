@@ -20,7 +20,7 @@ function sandbox(t, config) {
   fs.mkdirSync(dsh, { recursive: true })
   const cfgPath = path.join(dsh, 'pod.config.json')
   fs.writeFileSync(cfgPath, JSON.stringify({ owner: { mid: '1', name: '主人' }, ...config }))
-  const env = { ...process.env, USERPROFILE: home, HOME: home, DSH_HOME: dsh, BILI_POD_CONFIG: cfgPath, BILI_POD_WORK: path.join(dsh, 'pod-work'), BILI_POD_DIARY: path.join(dsh, 'pod-diary'), BILI_NO_CACHE: '1' }
+  const env = { ...process.env, USERPROFILE: home, HOME: home, DSH_HOME: dsh, BILI_POD_CONFIG: cfgPath, BILI_POD_WORK: path.join(dsh, 'pod-work'), BILI_POD_DIARY: path.join(dsh, 'pod-diary'), BILI_POD_STATE: path.join(home, '.bili-ai'), BILI_NO_CACHE: '1' }
   return { home, dsh, env }
 }
 

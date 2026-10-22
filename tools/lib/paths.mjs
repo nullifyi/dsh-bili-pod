@@ -17,6 +17,7 @@
  */
 import os from 'node:os'
 import path from 'node:path'
+import { stateDir, statePath } from '../../lib/state-dir.mjs'
 
 /** 用户主目录（Windows 优先 USERPROFILE，保持与原实现一致）。 */
 export const HOME = process.env.USERPROFILE || process.env.HOME || os.homedir() || '.'
@@ -47,3 +48,13 @@ export const diaryDir = process.env.BILI_POD_DIARY || dshPath('pod-diary')
 
 /** Credentials are per OS user, independent of DSH_HOME. */
 export const credentialsPath = homePath('.bili-ai', 'credentials.json')
+
+/**
+ * 运行状态目录（0.7.0）：`<workDir>/state`，与 lib/state-dir.mjs 同一套解析。
+ * 她跑一轮时 cwd 就是 workDir —— 状态放在这里，写入就不会越出 workspace-write 沙箱，
+ * 不再每条草稿/配额都弹一次「允许吗」。
+ * 凭据（credentials.json）与人设（persona.md）仍留在 ~/.bili-ai。
+ */
+export const STATE_DIR = stateDir(workDir)
+export const stateFile = (name) => statePath(name, workDir)
+export const legacyStateDir = homePath('.bili-ai')

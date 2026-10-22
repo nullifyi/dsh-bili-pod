@@ -15,7 +15,7 @@ function sandbox(t,cfg={}) {
   const dsh=path.join(home,'dsh');fs.mkdirSync(dsh);fs.mkdirSync(path.join(home,'.bili-ai'))
   const file=path.join(dsh,'pod.config.json');fs.writeFileSync(file,JSON.stringify({owner:{mid:'222',name:'Owner'},listen:{comment:false},review:{verify:false},...cfg}))
   fs.writeFileSync(path.join(home,'.bili-ai/credentials.json'),JSON.stringify({sessdata:'offline-credential-test-only',bili_jct:'a'.repeat(32),buvid3:'fake'}))
-  return {...process.env,HOME:home,USERPROFILE:home,DSH_HOME:dsh,DSH_NODE:process.execPath,BILI_POD_CONFIG:file,BILI_POD_WORK:path.join(dsh,'work'),BILI_POD_DIARY:path.join(dsh,'diary'),BILI_POD_EXT:path.join(dsh,'ext'),TEST_REQUESTS:path.join(dsh,'requests'),NODE_OPTIONS:'--import='+pathToFileURL(path.join(root,'tests/helpers/settings-fetch.mjs')).href}
+  return {...process.env,HOME:home,USERPROFILE:home,DSH_HOME:dsh,DSH_NODE:process.execPath,BILI_POD_STATE:path.join(home,'.bili-ai'),BILI_POD_CONFIG:file,BILI_POD_WORK:path.join(dsh,'work'),BILI_POD_DIARY:path.join(dsh,'diary'),BILI_POD_EXT:path.join(dsh,'ext'),TEST_REQUESTS:path.join(dsh,'requests'),NODE_OPTIONS:'--import='+pathToFileURL(path.join(root,'tests/helpers/settings-fetch.mjs')).href}
 }
 function run(env,file,args=[]) {const r=spawnSync(process.execPath,[path.join(root,file),...args],{env,encoding:'utf8',timeout:20000});assert.ifError(r.error);return r}
 const requests=env=>fs.existsSync(env.TEST_REQUESTS)?fs.readFileSync(env.TEST_REQUESTS,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse):[]

@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { stateFile } from './paths.mjs'
 
 const MIXIN = [46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,33,9,42,19,29,28,14,39,12,38,41,13,37,48,7,16,24,55,40,61,26,17,0,1,60,51,30,4,22,25,54,21,56,59,6,63,57,62,11,36,20,34,44,52]
 const keyOf = u => String(u).split('/').at(-1).split('.')[0]
@@ -26,13 +27,13 @@ export function signWbi(params, images, now = Date.now()) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const HOME = process.env.USERPROFILE || process.env.HOME || '.'
-const CACHE_FILE = path.join(HOME, '.bili-ai', 'api-cache.json')
-const BAN_FILE = path.join(HOME, '.bili-ai', 'api-ban.json')
+const CACHE_FILE = stateFile('api-cache.json')
+const BAN_FILE = stateFile('api-ban.json')
 const CACHE_TTL_MS = 24 * 3600 * 1000
 // 2026-10-22：请求日志 —— 回答「这一趟到底打了几次网络、命中几次缓存」
 //   主人问「她那次只查了一次缓存吗」✗ 当时只有「缓存写了几条」这个间接指标 ✗
 //   日志按行追加：时间 命中/未命中 路径（不含 cookie、不含响应正文）
-const REQ_LOG = path.join(HOME, '.bili-ai', 'api-requests.log')
+const REQ_LOG = stateFile('api-requests.log')
 const logReq = (hit, p) => {
   if (noCacheEnv()) return
   try { fs.appendFileSync(REQ_LOG, `${new Date().toISOString()} ${hit ? 'HIT ' : 'NET '} ${p}\n`) } catch {}

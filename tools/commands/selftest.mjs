@@ -101,7 +101,7 @@ console.log('')
 if (bad === 0) {
   try {
     fs.mkdirSync(path.join(HOME, '.bili-ai'), { recursive: true })
-    fs.writeFileSync(path.join(HOME, '.bili-ai', 'selftest-passed.json'), JSON.stringify({ at: new Date().toISOString() }, null, 2))
+    fs.writeFileSync(stateFile('selftest-passed.json'), JSON.stringify({ at: new Date().toISOString() }, null, 2))
   } catch {}
   console.log('══════════ 全部通过 ✓ 可以用了 ══════════')
   console.log('  想立刻看她跑一轮：设置页 →「生物钟」→ 把窗口改成现在之后 2 分钟 → 等她自己醒\n')

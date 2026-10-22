@@ -45,7 +45,7 @@ if (!roomArg) { console.error('需要 --room <房间号>'); process.exit(2) }
 
 const credDir = path.join((process.env.USERPROFILE || process.env.HOME || '/'), '.bili-ai')
 const cred = JSON.parse(fs.readFileSync(path.join(credDir, 'credentials.json'), 'utf8'))
-const statePath = path.join(credDir, 'await-state.json')
+const statePath = stateFile('await-state.json')
 const state = fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, 'utf8')) : { lastTs: 0 }
 const recentIds = new Set(state.recentIds ?? []) // 已处理过的消息 id（跨进程持久，防止重挂后重复回）
 const recentTexts = new Map(state.recentTexts ?? []) // "uid|文本" → 上次回复时间（防同句多发被回两次）
@@ -69,6 +69,7 @@ const jget = async (u) => (await fetch(u, { headers: H() })).json()
 // 账号昵称可能被改（实测小号改过名），
 // 所以自身名字动态从 nav 取，**历史昵称来自统一配置**（config.aliases），避免"@我"的弹幕被漏判。
 import { config } from '../lib/config.mjs'
+import { stateFile } from '../lib/paths.mjs'
 const SELF_NAMES = [...(config().aliases ?? [])]
 try {
   const navNow = await jget('https://api.bilibili.com/x/web-interface/nav')

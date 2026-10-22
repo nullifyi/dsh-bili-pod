@@ -8,6 +8,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { ffmpegInfo } from '../lib/ffmpeg.mjs'
+import { stateDir } from '../../lib/state-dir.mjs'
 
 const HOME = process.env.USERPROFILE || process.env.HOME || '.'
 const cred = path.join(HOME, '.bili-ai', 'credentials.json')
@@ -57,15 +58,19 @@ items.push({
   fix: '升级到 Node 18 或更高（fetch / Blob 之类要用）',
 })
 
-// ④ 可写的家目录（放 cookie/配额/日记）
+// ④ 可写的数据目录（cookie/人设 + 运行状态）
 let dirOk = false
+let dirDetail = ''
 try {
-  const d = path.join(HOME, '.bili-ai')
-  fs.mkdirSync(d, { recursive: true })
-  const probe = path.join(d, '.write-probe')
-  fs.writeFileSync(probe, 'ok'); fs.unlinkSync(probe)
+  const probes = [path.join(HOME, '.bili-ai'), stateDir()]
+  for (const d of probes) {
+    fs.mkdirSync(d, { recursive: true })
+    const probe = path.join(d, '.write-probe')
+    fs.writeFileSync(probe, 'ok'); fs.unlinkSync(probe)
+  }
   dirOk = true
-} catch {}
+  dirDetail = probes.join('  ·  ')
+} catch (e) { dirDetail = String(e?.message ?? e) }
 // 2026-10-21 加（Issue #8-3）：没有 node 运行时 → 生物钟/监听/直播间全部停用，
 //   但以前体检不报这一项 ✗ 表面全绿、其实永远不会醒 ✗
 try {
@@ -96,7 +101,7 @@ try {
   })
 } catch { /* 没有 api 模块时跳过这项 */ }
 
-items.push({ name: '数据目录可写', ok: dirOk, detail: path.join(HOME, '.bili-ai'), fix: '检查该目录权限' })
+items.push({ name: '数据目录可写', ok: dirOk, detail: dirDetail || path.join(HOME, '.bili-ai'), fix: '检查该目录权限' })
 
 const bad = items.filter((i) => !i.ok)
 

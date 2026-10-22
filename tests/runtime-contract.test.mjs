@@ -19,7 +19,7 @@ function sandbox(t, config = {}) {
   const cfg = path.join(dsh, 'pod.config.json')
   fs.writeFileSync(cfg, JSON.stringify({ listen: { comment: false, dm: false, live: false }, ...config }))
   fs.writeFileSync(path.join(home, '.bili-ai/credentials.json'), JSON.stringify({ sessdata: 'fake-local', bili_jct: 'a'.repeat(32) }))
-  return { ...process.env, HOME: home, USERPROFILE: home, DSH_HOME: dsh, DSH_NODE: process.execPath, BILI_POD_CONFIG: cfg, BILI_POD_WORK: path.join(dsh, 'pod-work'), BILI_POD_DIARY: path.join(dsh, 'pod-diary'), BILI_POD_EXT: path.join(dsh, 'pod-ext'), NODE_OPTIONS: '' }
+  return { ...process.env, HOME: home, USERPROFILE: home, DSH_HOME: dsh, DSH_NODE: process.execPath, BILI_POD_CONFIG: cfg, BILI_POD_WORK: path.join(dsh, 'pod-work'), BILI_POD_DIARY: path.join(dsh, 'pod-diary'), BILI_POD_STATE: path.join(home, '.bili-ai'), BILI_POD_EXT: path.join(dsh, 'pod-ext'), NODE_OPTIONS: '' }
 }
 function run(env, file, args = []) {
   const r = spawnSync(process.execPath, [path.join(root, file), ...args], { env, encoding: 'utf8', timeout: 15000 })

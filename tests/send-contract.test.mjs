@@ -13,9 +13,9 @@ function sandbox(t, cfg = {}) {
   const dsh = path.join(home, 'fake-dsh')
   fs.mkdirSync(dsh); fs.mkdirSync(path.join(home, '.bili-ai'))
   const config = path.join(dsh, 'pod.config.json')
-  fs.writeFileSync(config, JSON.stringify({ owner: { mid: '333', name: 'Owner' }, listen: { oncePerPerson: true, comment: false }, review: { preReview: true, verify: false }, notify: { type: 'none' }, ...cfg }))
+  fs.writeFileSync(config, JSON.stringify({ owner: { mid: '333', name: 'Owner' }, listen: { oncePerPerson: true, comment: false }, review: { policy: 'ask', verify: false }, notify: { type: 'none' }, ...cfg }))
   fs.writeFileSync(path.join(home, '.bili-ai/credentials.json'), JSON.stringify({ sessdata: 'FAKE-OFFLINE', bili_jct: 'a'.repeat(32), buvid3: 'fake' }))
-  return { ...process.env, HOME: home, USERPROFILE: home, DSH_HOME: dsh, DSH_NODE: process.execPath, BILI_POD_CONFIG: config, BILI_POD_WORK: path.join(dsh, 'work'), BILI_POD_DIARY: path.join(dsh, 'diary'), BILI_POD_SCOPE: 'off', TEST_REQUESTS: path.join(home, 'requests.jsonl'), NODE_OPTIONS: '--import=' + pathToFileURL(path.join(repo, 'tests/helpers/send-fetch.mjs')).href }
+  return { ...process.env, HOME: home, USERPROFILE: home, DSH_HOME: dsh, DSH_NODE: process.execPath, BILI_POD_CONFIG: config, BILI_POD_WORK: path.join(dsh, 'work'), BILI_POD_DIARY: path.join(dsh, 'diary'), BILI_POD_STATE: path.join(home, '.bili-ai'), BILI_POD_SCOPE: 'off', TEST_REQUESTS: path.join(home, 'requests.jsonl'), NODE_OPTIONS: '--import=' + pathToFileURL(path.join(repo, 'tests/helpers/send-fetch.mjs')).href }
 }
 function run(env, file, args = []) {
   const r = spawnSync(process.execPath, [path.join(repo, file), ...args], { env, encoding: 'utf8', timeout: 30000 })
@@ -40,7 +40,7 @@ for (const variant of ['root-only', 'reviewed', 'owner']) test('actual CLI requi
   assert.equal(posts(env).length, 0)
 })
 test('actual CLI recognizes data.root author and preserves normalized coordinates with review off', t => {
-  const env = sandbox(t, { review: { preReview: false, verify: false } })
+  const env = sandbox(t, { review: { policy: 'off', verify: false } })
   const r = run(env, 'tools/bili.mjs', comment.filter((x, i) => x !== '--parent' && comment[i - 1] !== '--parent'))
   assert.equal(r.status, 0, r.stdout + r.stderr)
   assert.equal(posts(env).length, 1)

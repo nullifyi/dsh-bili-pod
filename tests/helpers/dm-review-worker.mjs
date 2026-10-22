@@ -22,7 +22,7 @@ function quotaOne(){const q=JSON.parse(fs.readFileSync(path.join(process.env.USE
 if(scenario==='default-review') {
  assert.equal(run(ordinary).status,7);assert.equal(run([...ordinary,'--reviewed']).status,7);assert.equal(run([...ordinary,'--approval','forged','--operation-id','unknown']).status,7);assert.equal(dmPosts().length,0)
 } else if(scenario==='review-disabled') {
- cfgChange({review:{preReview:false,verify:false}});assertBad(run(ordinary,{TEST_RELATION_ATTRIBUTE:'2'}));assert.equal(dmPosts().length,0);assertOk(run(ordinary));assert.equal(dmPosts().length,1)
+ cfgChange({review:{policy:'off',verify:false}});assertBad(run(ordinary,{TEST_RELATION_ATTRIBUTE:'2'}));assert.equal(dmPosts().length,0);assertOk(run(ordinary));assert.equal(dmPosts().length,1)
 } else if(scenario==='draft') {
  assertOk(run(['reply-draft','add','--kind','dm','--to','222','--message',ordinary[2]]));const draft=JSON.parse(fs.readFileSync(PENDING_FILE)).items[0];assert.equal(draft.kind,'dm');assert.equal(draft.to,'222');assert.equal(draft.message,ordinary[2]);assertBad(run(['reply-draft','add','--kind','dm','--to','999','--message','wrong owner']))
 } else if(scenario==='approval-binding') {

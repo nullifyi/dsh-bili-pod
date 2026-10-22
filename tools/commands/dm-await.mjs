@@ -10,6 +10,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { config } from '../lib/config.mjs'
+import { stateFile } from '../lib/paths.mjs'
 
 const argv = process.argv.slice(2)
 const opt = {}
@@ -26,7 +27,7 @@ const JSONOUT = !!opt.json
 const PEEK = !!opt.peek
 
 const U = process.env.USERPROFILE || process.env.HOME || '/'
-const STATE = path.join(U, '.bili-ai', 'dm-await-state.json')
+const STATE = stateFile('dm-await-state.json')
 const c = JSON.parse(fs.readFileSync(path.join(U, '.bili-ai', 'credentials.json'), 'utf8'))
 const cfg = config()
 const OWNER = String(cfg.owner?.mid ?? '').trim()

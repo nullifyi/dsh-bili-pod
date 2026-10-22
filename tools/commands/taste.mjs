@@ -19,9 +19,10 @@ import path from 'node:path'
 import { config } from '../lib/config.mjs'
 import { writeConfig } from '../../lib/store.mjs'
 import { apiGet, signWbi } from '../lib/bili-api.mjs'
+import { stateFile } from '../lib/paths.mjs'
 
 const HOME = process.env.USERPROFILE || process.env.HOME || '.'
-const LOG = path.join(HOME, '.bili-ai', 'taste-log.jsonl')
+const LOG = stateFile('taste-log.jsonl')
 const argv = process.argv.slice(2)
 const cmd = argv[0] ?? 'show'
 const opt = {}

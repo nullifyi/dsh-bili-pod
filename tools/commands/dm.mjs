@@ -17,14 +17,18 @@ import crypto from 'node:crypto'
 import { config } from '../lib/config.mjs'
 import { validateShare } from '../lib/share-policy.mjs'
 import { gate, record } from '../lib/quota-gate.mjs'
-import { coordinates, checkApproval, beginSend, finishSend, claimShareContinuation, finishShareContinuation } from '../../lib/comment-state.mjs'
+import { buildDmMessage } from '../../lib/dm-message.mjs'
+import { reviewDecision, reserveAuto, settleAuto } from '../../lib/policy.mjs'
+import { STATE_DIR } from '../lib/paths.mjs'
+import { addDraft, coordinates, checkApproval, beginSend, finishSend, claimShareContinuation, finishShareContinuation } from '../../lib/comment-state.mjs'
+import { stateFile } from '../lib/paths.mjs'
 
 // 上游 v0.4.5 同步：稳定的设备 ID —— 只生成一次，之后永久复用 ✓
 //   以前每发一条私信就随机一个新 dev_id ✗ → 风控看到「同一个人在不同设备间切换」→ 小号易被封控
 //   真浏览器里这个值是固定的；存在 ~/.bili-ai/dev_id（0600），写坏了自动重建（只发生一次）
 function stableDevId() {
   const home = process.env.USERPROFILE || process.env.HOME || '.'
-  const file = path.join(home, '.bili-ai', 'dev_id')
+  const file = stateFile('dev_id')
   try {
     const v = fs.readFileSync(file, 'utf8').trim()
     if (/^WEB-[0-9A-F-]{20,}$/i.test(v)) return v
@@ -79,7 +83,7 @@ if (SHARE && !STATUS) {
 
 const HOME = process.env.USERPROFILE || process.env.HOME || '.'
 const CRED = path.join(HOME, '.bili-ai', 'credentials.json')
-const QUOTA = path.join(HOME, '.bili-ai', 'dm-quota.json')
+const QUOTA = stateFile('dm-quota.json')
 // 2026-10-21：用共用凭据层（trim + 缺字段检查 + 错误码翻译）
 //   以前这里直接 JSON.parse 就用：bili_jct 空着也照发 → B站回裸的 code=-111，
 //   用户看到"体检全绿 / 能查互关"却发不出去，完全不知道该改什么 ✗
@@ -141,20 +145,38 @@ if (opt.target && (!/^(?:BV:)?BV[0-9A-Za-z]{10}$/.test(String(opt.target)) || BV
 }
 if (SHARE && !STATUS && !targetBV) { console.error("分享需要正文或 --target 中的有效 BV 号"); process.exit(2) }
 const SHARE_TARGET = targetBV ? "BV:" + targetBV : "dm:" + ONLY_TO
-const continuationDetails = { ownerMid: OWNER, bvid: targetBV, message: MSG }
+// 0.7.0（PLAN §3.3）：分享私信必须带能直接点开的链接 —— 正文只在这一个入口里构造。
+//   预检、存草稿、审核凭据的指纹、真正 POST，用的都是这一段 FINAL，避免「批准的是 A、发出去的是 B」。
+const built = buildDmMessage({ message: MSG, bvid: targetBV, share: SHARE && !STATUS })
+if (!built.ok) { console.error('✗ ' + built.reason); process.exit(2) }
+if (built.addedUrl) console.error('[私信] 正文里没带链接，已补一行视频地址（批准与发送用的是同一段文字）')
+const FINAL = built.text
+const continuationDetails = { ownerMid: OWNER, bvid: targetBV, message: FINAL }
 if (CONTINUATION) {
   try { claimShareContinuation(CONTINUATION, continuationDetails, { claim: false }) }
   catch(e) { console.error('[续送] ' + e.message); process.exit(7) }
 }
 
 // 审核凭据（坐标随收信人变）：女主人 → 也要绑她 + 正文；通知测试是宿主固定文案 → 免审
-const draft = coordinates({ kind: 'dm', to: ONLY_TO, message: MSG })
+const draft = coordinates({ kind: 'dm', to: ONLY_TO, message: FINAL })
 const approval = { operationId: opt['operation-id'], token: opt.approval }
-const needsApproval = !SHARE && !TEST && cfg.review?.preReview !== false
+// 0.7.0：审核档位由 lib/policy.mjs 统一决策（policy + dm.autoSend + 收信人白名单 + 静音时段）
+const decision = reviewDecision({ kind: 'dm', role: IS_MISTRESS ? 'mistress' : 'owner', relationship: 'mutual', share: SHARE, cfg })
+// 续送（--continuation）是宿主在批准分享评论时一并签发的，不再二次问；通知测试是宿主固定文案
+// 分享型私信（--share）走 share 闸，不走审核档位（与分享评论一致，主人已明确「分享不必每次问」）
+const needsApproval = !TEST && !CONTINUATION && !SHARE && decision.required
 if (GO && (needsApproval || approval.token) && !checkApproval(draft, approval)) {
   console.error(IS_MISTRESS
-    ? `[审核] 给${MISTRESS_TITLE}的私信要先走宿主审核入口（reply-draft add --kind dm），批准后由设置页发送。`
-    : '[审核] 普通私信回复需要绑定主人与正文的一次性宿主批准；--reviewed 不能代替审核。')
+    ? `[审核] ${decision.reason} —— 已存草稿，批准后由设置页发送。`
+    : `[审核] ${decision.reason} —— 已存草稿，批准后再发。`)
+  try {
+    const dr = addDraft({
+      kind: 'dm', to: ONLY_TO, message: FINAL, bvid: targetBV ?? '', who: RECIPIENT_NAME, src: '审核未通过',
+      share: !!(SHARE && !STATUS), reason: opt.reason ?? '', score: opt.score ?? '', rank: opt.rank ?? 1,
+      topic: '发前审核',
+    })
+    console.error(dr.duplicate ? `  → 同一条草稿已在待审列表里（id ${dr.item.id}）` : `  → 已存成草稿（id ${dr.item.id}），在设置页点「发」才会真发`)
+  } catch (e) { console.error('  → 存草稿失败：' + String(e.message).slice(0, 120)) }
   process.exit(7)
 }
 
@@ -245,7 +267,7 @@ if (ONE_TARGET_PER_DAY && q.date === today() && q.mid && String(q.mid) !== ONLY_
   process.exit(4)
 }
 // 女主人的份额是单独的一本小账：每天 cfg.mistress.shareDaily 条（默认 1），不占主人的分享额度
-const MQ = path.join(HOME, '.bili-ai', 'dm-mistress.json')
+const MQ = stateFile('dm-mistress.json')
 const loadMQ = () => { try { return JSON.parse(fs.readFileSync(MQ, 'utf8')) } catch { return {} } }
 const saveMQ = (o) => { try { fs.mkdirSync(path.dirname(MQ), { recursive: true }); fs.writeFileSync(MQ, JSON.stringify(o, null, 2) + '\n') } catch { /* 记账失败不重发 */ } }
 const mq = loadMQ()
@@ -257,7 +279,7 @@ if (IS_MISTRESS && SHARE && !CONTINUATION) {
 }
 
 console.log(`[dm] ${meInfo.uname} → ${RECIPIENT_NAME}（mid ${ONLY_TO}）${IS_MISTRESS ? ' · 女主人通道（1 条/天、过审核）' : ''}`)
-console.log(`  正文 ${MSG.length} 字：${MSG.slice(0, 80)}${MSG.length > 80 ? '…' : ''}`)
+console.log(`  正文 ${FINAL.length} 字：${FINAL.slice(0, 80)}${FINAL.length > 80 ? '…' : ''}`)
 console.log(`  互关 ✓  ·  今天第 ${(IS_MISTRESS ? mistressUsed : used) + 1} 条（条数不限 ✓ 锁定给 ${RECIPIENT_NAME} ✓）`)
 
 if (!GO && !DRY) { console.error('✗ 必须给 --dry 或 --go'); process.exit(2) }
@@ -269,6 +291,26 @@ if (SHARE && !CONTINUATION && !IS_MISTRESS) {
   if (!ok) { console.error('✗ 分享额度不允许（见上面的 [限额闸] 输出）'); process.exit(4) }
 }
 if (DRY) { console.log('  [dry] 预检通过（额度闸也看了），未发送 ✓ 正式发送时会重新检查额度'); process.exit(0) }
+
+// 0.7.0：没经过主人手的那部分，也要过「自动发送额度」（每天 / 每人 / 静音时段）。
+//   预留 → 发送 → 结算；预留失败就转草稿，绝不硬发。
+let autoOpId = null
+if (!needsApproval && !CONTINUATION) {
+  const opId = `dm-${crypto.randomBytes(6).toString('hex')}`
+  const reserved = reserveAuto(STATE_DIR, { opId, kind: 'dm', mid: ONLY_TO, limits: decision.limits })
+  if (!reserved.ok) {
+    console.error(`[自动发送] ${reserved.reason}`)
+    const draftRes = addDraft({
+      kind: 'dm', to: ONLY_TO, message: FINAL, bvid: targetBV ?? '', who: RECIPIENT_NAME, src: 'auto-budget',
+      share: !!(SHARE && !STATUS), reason: opt.reason ?? '', score: opt.score ?? '', rank: opt.rank ?? 1,
+      topic: '自动发送额度用尽',
+    })
+    console.error(draftRes.duplicate ? `  → 同一条草稿已经在待审列表里（id ${draftRes.item.id}）` : `  → 已转成草稿（id ${draftRes.item.id}），在设置页审核后再发`)
+    process.exit(4)
+  }
+  autoOpId = opId
+}
+
 let operationId
 try {
   if (CONTINUATION) claimShareContinuation(CONTINUATION, continuationDetails)
@@ -279,10 +321,11 @@ try {
 } catch(e) { console.error('[审核/续送] ' + e.message); process.exit(7) }
 const finish = (status, details) => CONTINUATION ? finishShareContinuation(CONTINUATION, status, details) : finishSend(operationId, status, details)
 let r
-try { r = await send(ONLY_TO, MSG) }
-catch(e) { finish('uncertain', {reason: String(e.message).slice(0,200)}); console.error('发送结果不明，请人工核对，勿重发'); process.exit(8) }
+try { r = await send(ONLY_TO, FINAL) }
+catch(e) { finish('uncertain', {reason: String(e.message).slice(0,200)}); if (autoOpId) settleAuto(STATE_DIR, autoOpId, 'uncertain'); console.error('发送结果不明，请人工核对，勿重发'); process.exit(8) }
 if (r.http >= 200 && r.http < 300 && r.code === 0) {
   finish('accepted', { code: 0, accountingStatus: 'pending' })
+  if (autoOpId) settleAuto(STATE_DIR, autoOpId, 'accepted')
   let complete = true
   try {
     if (IS_MISTRESS) {
@@ -292,12 +335,12 @@ if (r.http >= 200 && r.http < 300 && r.code === 0) {
         fs.appendFileSync(path.join(HOME, '.dsh', 'pod-log.jsonl'), JSON.stringify({
           at: new Date().toISOString(), kind: 'mistress-share',
           target: targetBV ? `BV:${targetBV}` : `mid:${ONLY_TO}`,
-          note: MSG.slice(0, 60),
+          note: FINAL.slice(0, 60),
         }) + '\n')
       } catch { /* 事件流丢了不影响发送结果 */ }
     } else {
       saveQ({ date: today(), count: used + 1, mid: ONLY_TO, at: new Date().toISOString() })
-      if (SHARE && !CONTINUATION) complete = record({ type: 'dm', target: SHARE_TARGET, note: MSG.slice(0, 40), auto: true, share: true, operationId }).code === 0
+      if (SHARE && !CONTINUATION) complete = record({ type: 'dm', target: SHARE_TARGET, note: FINAL.slice(0, 40), auto: true, share: true, operationId }).code === 0
     }
   } catch { complete = false }
   if (CONTINUATION) {
@@ -310,5 +353,6 @@ if (r.http >= 200 && r.http < 300 && r.code === 0) {
   process.exit(0)
 }
 finish(typeof r.code === 'number' && r.code !== 0 ? 'rejected' : 'uncertain', { code: r.code ?? null, reason: String(r.message ?? '') })
+if (autoOpId) settleAuto(STATE_DIR, autoOpId, typeof r.code === 'number' && r.code !== 0 ? 'rejected' : 'uncertain')
 console.error(`  ✗ 发送失败：HTTP ${r.http} ${explainCode(r.code)}${r.message ? `（B站原文：${r.message}）` : ''}`)
 process.exit(1)
