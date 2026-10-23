@@ -18,7 +18,7 @@ import { config } from '../lib/config.mjs'
 import { validateShare } from '../lib/share-policy.mjs'
 import { gate, record } from '../lib/quota-gate.mjs'
 import { buildDmMessage } from '../../lib/dm-message.mjs'
-import { reviewDecision, reserveAuto, settleAuto } from '../../lib/policy.mjs'
+import { reviewDecision, reserveAuto, settleAuto, dmGapBlocks } from '../../lib/policy.mjs'
 import { STATE_DIR } from '../lib/paths.mjs'
 import { addDraft, coordinates, checkApproval, beginSend, finishSend, claimShareContinuation, finishShareContinuation } from '../../lib/comment-state.mjs'
 import { stateFile } from '../lib/paths.mjs'
@@ -272,9 +272,11 @@ if (SHARE && !IS_MISTRESS && !REPLY && !DRY && !CONTINUATION) {
   if (used >= cap) { console.error(`✗ 今天主动私信已发 ${used} 条（上限 ${cap}）—— 调高「私信·每天条数」或等明天`); process.exit(4) }
   const gapMin = Math.max(0, Math.floor(Number(cfg.dm?.minGapMinutes ?? 240)))
   const lastAt = Date.parse(String(q.at ?? ''))
-  if (gapMin > 0 && Number.isFinite(lastAt) && Date.now() - lastAt < gapMin * 60000) {
-    const left = Math.ceil((gapMin * 60000 - (Date.now() - lastAt)) / 60000)
-    console.error(`✗ 离上一条主动私信不到 ${gapMin} 分钟（还剩 ${left} 分钟）—— 想发快些就把「两条私信最少隔」调小`)
+  // 「相关/连续」的消息不受间隔限制：同一个视频的续聊，或拆分长文时的后续片段（--continues）。
+  const sameThread = argv.includes('--continues') || (!!targetBV && !!q.bvid && String(q.bvid) === String(targetBV))
+  const gap = dmGapBlocks({ lastAt, gapMin, sameThread })
+  if (gap.blocked) {
+    console.error(`✗ 离上一条主动私信不到 ${gapMin} 分钟（还剩 ${gap.leftMin} 分钟）—— 想发快些就把「两条私信最少隔」调小；同话题续发/拆分长文用 --continues 不受此限`)
     process.exit(4)
   }
 }
@@ -298,12 +300,12 @@ if (IS_MISTRESS && SHARE && !CONTINUATION) {
 }
 // 回她的消息：不占主动额度，但也要有个上限防止刷屏（默认 6，可改）
 if (IS_MISTRESS && REPLY) {
-  const cap = Math.max(0, Number(cfg.mistress?.replyMaxPerDay ?? 6))
-  if (cap <= 0) { console.error('✗ 回复女主人上限是 0 —— 去设置里调大'); process.exit(4) }
-  if (mistressReplied >= cap) { console.error(`✗ 今天回她已有 ${mistressReplied} 条（上限 ${cap}）—— 明天再说`); process.exit(4) }
+  // 0 = 不限（默认；她来问就回，别让「防刷屏」拦住应答）
+  const cap = Math.max(0, Number(cfg.mistress?.replyMaxPerDay ?? 0))
+  if (cap > 0 && mistressReplied >= cap) { console.error(`✗ 今天回她已有 ${mistressReplied} 条（上限 ${cap}）—— 明天再说`); process.exit(4) }
 }
 
-console.log(`[dm] ${meInfo.uname} → ${RECIPIENT_NAME}（mid ${ONLY_TO}）${IS_MISTRESS ? (REPLY ? ' · 女主人回复（不占主动额度，过审核）' : ' · 女主人通道（1 条/天、过审核）') : ''}`)
+console.log(`[dm] ${meInfo.uname} → ${RECIPIENT_NAME}（mid ${ONLY_TO}）${IS_MISTRESS ? (REPLY ? ' · 女主人回复（不占主动额度，过审核）' : ' · 女主人通道（主动 10 条/天、回复不限、过审核）') : ''}`)
 console.log(`  正文 ${FINAL.length} 字：${FINAL.slice(0, 80)}${FINAL.length > 80 ? '…' : ''}`)
 console.log(`  互关 ✓  ·  今天第 ${(IS_MISTRESS ? mistressUsed : used) + 1} 条（上限 ${IS_MISTRESS ? Math.max(0, Number(cfg.mistress?.shareDaily ?? 1)) : Math.max(0, Math.floor(Number(cfg.dm?.maxPerDay ?? 1)))} 条/天 ✓ 锁定给 ${RECIPIENT_NAME} ✓）`)
 

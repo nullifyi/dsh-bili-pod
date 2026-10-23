@@ -261,7 +261,8 @@ test('mistress: normalisation, warnings and role separation', async () => {
   const on = normalizeConfig({ owner: { mid: '1', name: '主人' }, mistress: { enabled: true, mid: '2', name: '太太', shareDaily: 9, like: ['狗'] } })
   assert.equal(on.config.mistress.enabled, true)
   assert.equal(on.config.mistress.mid, '2')
-  assert.equal(on.config.mistress.shareDaily, 5)
+  assert.equal(on.config.mistress.shareDaily, 9)
+  assert.equal(normalizeConfig({ mistress: { shareDaily: 99 } }).config.mistress.shareDaily, 10)
   assert.deepEqual(on.config.mistress.like, ['狗'])
   assert.equal(on.config.mistress.title, '女主人')
   assert.deepEqual(on.warns, [])
@@ -276,11 +277,13 @@ test('mistress: normalisation, warnings and role separation', async () => {
   // 2026-10-22 追加：她发来的消息必须回，且回信不占「主动私信」额度（另有自己的日上限）
   const d = normalizeConfig({}).config.mistress
   assert.equal(d.replyAlways, true)
-  assert.equal(d.replyMaxPerDay, 6)
+  assert.equal(d.replyMaxPerDay, 0)  // 0 = 不限
   assert.equal(d.splitLong, true)
   assert.equal(d.styleNotes, '')
-  const clamped = normalizeConfig({ mistress: { replyMaxPerDay: 99, replyAlways: false } }).config.mistress
-  assert.equal(clamped.replyMaxPerDay, 30)
+  const clamped = normalizeConfig({ mistress: { replyMaxPerDay: 500, replyAlways: false } }).config.mistress
+  assert.equal(clamped.replyMaxPerDay, 100)
+  const unlimited = normalizeConfig({ mistress: { replyMaxPerDay: -5 } }).config.mistress
+  assert.equal(unlimited.replyMaxPerDay, 0)
   assert.equal(clamped.replyAlways, false)
 })
 

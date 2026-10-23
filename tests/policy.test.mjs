@@ -145,3 +145,17 @@ test('状态迁移：只搬白名单、目标已存在不覆盖、凭据和人�
   assert.equal(again.errors.length, 0, '重跑不该报错')
   assert.deepEqual(again.skipped.sort(), ['pending-replies.json', 'quota.json'].sort())
 })
+
+test('dmGapBlocks: 同话题续发不卡间隔，新话题按分钟数等', async () => {
+  const { dmGapBlocks } = await import('../lib/policy.mjs')
+  const now = Date.parse('2026-10-24T12:00:00Z')
+  // 5 分钟前刚发过，间隔 30 分钟 → 新话题要等 25 分钟；同一话题/拆分续发立刻可发
+  const last = now - 5 * 60000
+  assert.deepEqual(dmGapBlocks({ lastAt: last, now, gapMin: 30 }), { blocked: true, leftMin: 25 })
+  assert.deepEqual(dmGapBlocks({ lastAt: last, now, gapMin: 30, sameThread: true }), { blocked: false })
+  // 间隔调成 0 / 没发过 / 时间坏掉 → 一律放行
+  assert.deepEqual(dmGapBlocks({ lastAt: last, now, gapMin: 0 }), { blocked: false })
+  assert.deepEqual(dmGapBlocks({ lastAt: NaN, now, gapMin: 30 }), { blocked: false })
+  // 已经等够 → 放行
+  assert.deepEqual(dmGapBlocks({ lastAt: now - 31 * 60000, now, gapMin: 30 }), { blocked: false })
+})
