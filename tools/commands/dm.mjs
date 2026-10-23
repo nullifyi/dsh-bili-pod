@@ -22,6 +22,8 @@ import { reviewDecision, reserveAuto, settleAuto } from '../../lib/policy.mjs'
 import { STATE_DIR } from '../lib/paths.mjs'
 import { addDraft, coordinates, checkApproval, beginSend, finishSend, claimShareContinuation, finishShareContinuation } from '../../lib/comment-state.mjs'
 import { stateFile } from '../lib/paths.mjs'
+import { workDir } from '../lib/paths.mjs'
+import { readScope } from '../../lib/scope.mjs'
 
 // 上游 v0.4.5 同步：稳定的设备 ID —— 只生成一次，之后永久复用 ✓
 //   以前每发一条私信就随机一个新 dev_id ✗ → 风控看到「同一个人在不同设备间切换」→ 小号易被封控
@@ -304,7 +306,12 @@ if (DRY) { console.log('  [dry] 预检通过（额度闸也看了），未发送
 // 0.7.0：没经过主人手的那部分，也要过「自动发送额度」（每天 / 每人 / 静音时段）。
 //   预留 → 发送 → 结算；预留失败就转草稿，绝不硬发。
 let autoOpId = null
-if (!needsApproval && !CONTINUATION) {
+const roundScope = readScope(workDir)
+const scopeAge = Date.now() - Date.parse(roundScope?.at ?? '')
+const ownerRequested = !IS_MISTRESS && roundScope?.userInitiated === true && scopeAge >= 0 && scopeAge < 4 * 3600_000
+// 给主人正常回复与主人手动叫醒，不占自主推荐的发送限额。
+const autonomousDm = IS_MISTRESS || (SHARE && !ownerRequested)
+if (!needsApproval && !CONTINUATION && autonomousDm) {
   const opId = `dm-${crypto.randomBytes(6).toString('hex')}`
   const reserved = reserveAuto(STATE_DIR, { opId, kind: 'dm', mid: ONLY_TO, limits: decision.limits })
   if (!reserved.ok) {
