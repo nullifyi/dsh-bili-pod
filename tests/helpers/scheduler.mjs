@@ -63,3 +63,22 @@ await s2.tick();s2.stop()
 assert.match(messages.at(-1),/今晚不看/);assert.ok(messages.at(-1).includes('关掉了推送'))
 assert.ok(messages.at(-1).includes('测试专属人设'))
 const end=JSON.parse(fs.readFileSync(state));assert.ok((end.usedCount?.[skip.windowKey]??0)>0,'skip 应消耗一次机会')
+
+// 0.7.4：搬过 DSH_HOME（或改过工作目录）之后，旧会话还挂在老目录上，
+//   sessionController.create 会因为「belongs to 老目录」失败。
+//   正确做法：不删旧会话、也不另起影子会话 —— 沿用旧会话的 cwd 把这场对话续上。
+fs.rmSync(path.join(workDir,'state','agent-session.json'),{force:true})
+const calls=[]
+let first=true
+const s3=startScheduler({sessionController:{
+  create:async(o)=>{calls.push(o.cwd);if(first){first=false;throw new Error('session "bili-pod" belongs to "C:/old/pod-work", not "'+o.cwd+'"')}return {sessionId:'adopted-session'}},
+  prompt:async p=>{messages.push(p.content[0].text);return {accepted:true}},
+}},opts())
+const tonight=new RealDate('2026-10-22T20:10:00').getTime()
+now=tonight
+fs.writeFileSync(state,JSON.stringify(makePlan(cfg.night,{},now,()=>0.1)))
+await s3.tick(true)
+assert.equal(calls.length,2,'第一次失败后应重试一次')
+assert.equal(calls[1],'C:/old/pod-work','重试应沿用旧会话的工作目录')
+assert.ok(messages.at(-1).includes('测试专属人设'),'续上旧会话后应真的投递')
+s3.stop()
