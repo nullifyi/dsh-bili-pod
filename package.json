@@ -1,6 +1,6 @@
 {
   "name": "dsh-bili-pod",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "鲸群：在 dsh-bili-whale 基座上的「可插拔」B 站生活 —— 扫码登录、峰谷生物钟、分栏日记 + 分类记录库、带哈希链的账本、评论发出后复核、mod 扩展接口。设置里有「鲸群」完整设置页。",
   "keywords": [
     "dsh",

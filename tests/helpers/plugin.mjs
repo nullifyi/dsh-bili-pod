@@ -9,6 +9,9 @@ cp.execFile=(exe,args,options,cb)=>{
   if(args.includes('comment')) {
     const success=process.env.TEST_SEND_SUCCESS==='1'
     queueMicrotask(()=>cb(success?null:new Error('mock send failure'),success?'code=0\n已发布，评论 rpid=123':'code=-101',''))
+  } else if(args.includes('dm')) {
+    const success=process.env.TEST_SEND_SUCCESS==='1'
+    queueMicrotask(()=>cb(success?null:new Error('mock dm failure'),success?'code=0':'code=-101',''))
   } else {
     assert.ok(args.includes('take')||args.includes('add'))
     const r=cp.spawnSync(exe,args,{...options,encoding:'utf8'})
@@ -64,6 +67,18 @@ if(process.env.TEST_NO_NODE) {
   assert.equal(response.data.ok,process.env.TEST_SEND_SUCCESS==='1')
   const queue=JSON.parse(fs.readFileSync(pending,'utf8')).items
   assert.equal(queue.length,process.env.TEST_SEND_SUCCESS==='1'?0:1)
+
+  // 0.7.2：旧草稿不会因为事后改了档位、后来才打开「私信自动发送」就自己放行；
+  //   主人可以点「按当前档位重判」，只重判私信类（评论要按对方身份判）。
+  await request('settings',{config:{dm:{autoSend:true,autoSendTo:['owner']}}})
+  fs.writeFileSync(pending,JSON.stringify({items:[{id:'dmtest',kind:'dm',to:'333',who:'主人',message:'我在的',topic:'发前审核：当时没开自动发送'}]}))
+  const re=await request('pending/reapply',{})
+  assert.equal(re.data.ok,true)
+  assert.equal(re.data.autoSend,true)
+  await new Promise(r=>setImmediate(r))
+  if(process.env.TEST_SEND_SUCCESS==='1') assert.equal(re.data.approved,1,'按当前档位应把这条私信发掉')
+  const left=JSON.parse(fs.readFileSync(pending,'utf8')).items
+  if(process.env.TEST_SEND_SUCCESS==='1') assert.equal(left.length,0)
 
   // ── 新路由的「读」这一侧（不碰网络）────────────────────────────────────
   const st=await request('status',{},'GET')
