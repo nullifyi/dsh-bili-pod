@@ -264,6 +264,20 @@ if (REQUIRE_MUTUAL && rel.attribute !== 6) {
 
 const q = loadQ()
 const used = q.date === today() ? Number(q.count ?? 0) : 0
+// 0.7.5：私信自己也有日上限与最小间隔（这两个设置以前只写在默认值里、从没生效过）。
+//   回复私信（--reply，女主人发来消息）不受日上限约束 —— 人家来问，总得让回。
+if (SHARE && !IS_MISTRESS && !REPLY && !DRY && !CONTINUATION) {
+  const cap = Math.max(0, Math.floor(Number(cfg.dm?.maxPerDay ?? 1)))
+  if (cap <= 0) { console.error('✗ 私信每天条数上限是 0 —— 去设置里调大（或先用草稿手动发）'); process.exit(4) }
+  if (used >= cap) { console.error(`✗ 今天主动私信已发 ${used} 条（上限 ${cap}）—— 调高「私信·每天条数」或等明天`); process.exit(4) }
+  const gapMin = Math.max(0, Math.floor(Number(cfg.dm?.minGapMinutes ?? 240)))
+  const lastAt = Date.parse(String(q.at ?? ''))
+  if (gapMin > 0 && Number.isFinite(lastAt) && Date.now() - lastAt < gapMin * 60000) {
+    const left = Math.ceil((gapMin * 60000 - (Date.now() - lastAt)) / 60000)
+    console.error(`✗ 离上一条主动私信不到 ${gapMin} 分钟（还剩 ${left} 分钟）—— 想发快些就把「两条私信最少隔」调小`)
+    process.exit(4)
+  }
+}
 // ① 一天只锁定 1 个收信人（条数不限 ✓）：如果今天已经发给过别人 → 拒
 if (ONE_TARGET_PER_DAY && q.date === today() && q.mid && String(q.mid) !== ONLY_TO) {
   console.error(`✗ 今天已经锁定给 mid ${q.mid} 了 —— 一天只能锁定 1 个收信人（防刷量 ✗）`)
@@ -291,7 +305,7 @@ if (IS_MISTRESS && REPLY) {
 
 console.log(`[dm] ${meInfo.uname} → ${RECIPIENT_NAME}（mid ${ONLY_TO}）${IS_MISTRESS ? (REPLY ? ' · 女主人回复（不占主动额度，过审核）' : ' · 女主人通道（1 条/天、过审核）') : ''}`)
 console.log(`  正文 ${FINAL.length} 字：${FINAL.slice(0, 80)}${FINAL.length > 80 ? '…' : ''}`)
-console.log(`  互关 ✓  ·  今天第 ${(IS_MISTRESS ? mistressUsed : used) + 1} 条（条数不限 ✓ 锁定给 ${RECIPIENT_NAME} ✓）`)
+console.log(`  互关 ✓  ·  今天第 ${(IS_MISTRESS ? mistressUsed : used) + 1} 条（上限 ${IS_MISTRESS ? Math.max(0, Number(cfg.mistress?.shareDaily ?? 1)) : Math.max(0, Math.floor(Number(cfg.dm?.maxPerDay ?? 1)))} 条/天 ✓ 锁定给 ${RECIPIENT_NAME} ✓）`)
 
 if (!GO && !DRY) { console.error('✗ 必须给 --dry 或 --go'); process.exit(2) }
 
@@ -319,7 +333,7 @@ if (!needsApproval && !CONTINUATION && autonomousDm) {
     const draftRes = addDraft({
       kind: 'dm', to: ONLY_TO, message: FINAL, bvid: targetBV ?? '', who: RECIPIENT_NAME, src: 'auto-budget',
       share: !!(SHARE && !STATUS), reason: opt.reason ?? '', score: opt.score ?? '', rank: opt.rank ?? 1,
-      topic: '自动发送额度用尽',
+      topic: '自动发送额度用尽：' + String(reserved.reason ?? ''),
     })
     console.error(draftRes.duplicate ? `  → 同一条草稿已经在待审列表里（id ${draftRes.item.id}）` : `  → 已转成草稿（id ${draftRes.item.id}），在设置页审核后再发`)
     process.exit(4)
