@@ -159,3 +159,14 @@ test('dmGapBlocks: 同话题续发不卡间隔，新话题按分钟数等', asyn
   // 已经等够 → 放行
   assert.deepEqual(dmGapBlocks({ lastAt: now - 31 * 60000, now, gapMin: 30 }), { blocked: false })
 })
+
+test('dmSameThread: 同一轮 / 同一 BV / --continues 都算连续消息', async () => {
+  const { dmSameThread } = await import('../lib/policy.mjs')
+  assert.equal(dmSameThread({ last: { round: 'r1' }, scope: { round: 'r1' } }), true)
+  assert.equal(dmSameThread({ last: { round: 'r1' }, scope: { round: 'r2' } }), false)
+  assert.equal(dmSameThread({ last: { bvid: 'BV1xx' }, targetBvid: 'BV1xx' }), true)
+  assert.equal(dmSameThread({ last: { bvid: 'BV1xx' }, targetBvid: 'BV1yy' }), false)
+  assert.equal(dmSameThread({ last: {}, continues: true }), true)
+  // 老记录没有 round/bvid → 只能靠 --continues
+  assert.equal(dmSameThread({ last: {}, scope: { round: 'r1' } }), false)
+})

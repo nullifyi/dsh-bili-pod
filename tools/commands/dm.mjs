@@ -18,7 +18,7 @@ import { config } from '../lib/config.mjs'
 import { validateShare } from '../lib/share-policy.mjs'
 import { gate, record } from '../lib/quota-gate.mjs'
 import { buildDmMessage } from '../../lib/dm-message.mjs'
-import { reviewDecision, reserveAuto, settleAuto, dmGapBlocks } from '../../lib/policy.mjs'
+import { reviewDecision, reserveAuto, settleAuto, dmGapBlocks, dmSameThread } from '../../lib/policy.mjs'
 import { STATE_DIR } from '../lib/paths.mjs'
 import { addDraft, coordinates, checkApproval, beginSend, finishSend, claimShareContinuation, finishShareContinuation } from '../../lib/comment-state.mjs'
 import { stateFile } from '../lib/paths.mjs'
@@ -272,8 +272,9 @@ if (SHARE && !IS_MISTRESS && !REPLY && !DRY && !CONTINUATION) {
   if (used >= cap) { console.error(`✗ 今天主动私信已发 ${used} 条（上限 ${cap}）—— 调高「私信·每天条数」或等明天`); process.exit(4) }
   const gapMin = Math.max(0, Math.floor(Number(cfg.dm?.minGapMinutes ?? 240)))
   const lastAt = Date.parse(String(q.at ?? ''))
-  // 「相关/连续」的消息不受间隔限制：同一个视频的续聊，或拆分长文时的后续片段（--continues）。
-  const sameThread = argv.includes('--continues') || (!!targetBV && !!q.bvid && String(q.bvid) === String(targetBV))
+  // 「相关/连续」的消息不受间隔限制：同一轮写的（摘要 + 分享）、同一个视频的续聊、或拆分长文（--continues）。
+  const scopeNow = readScope(workDir)
+  const sameThread = dmSameThread({ last: q, targetBvid: targetBV, continues: argv.includes('--continues'), scope: scopeNow })
   const gap = dmGapBlocks({ lastAt, gapMin, sameThread })
   if (gap.blocked) {
     console.error(`✗ 离上一条主动私信不到 ${gapMin} 分钟（还剩 ${gap.leftMin} 分钟）—— 想发快些就把「两条私信最少隔」调小；同话题续发/拆分长文用 --continues 不受此限`)
@@ -377,7 +378,7 @@ if (r.http >= 200 && r.http < 300 && r.code === 0) {
         }) + '\n')
       } catch { /* 事件流丢了不影响发送结果 */ }
     } else {
-      saveQ({ date: today(), count: used + 1, mid: ONLY_TO, at: new Date().toISOString() })
+      saveQ({ date: today(), count: used + 1, mid: ONLY_TO, at: new Date().toISOString(), bvid: targetBV ?? '', round: readScope(workDir)?.round ?? '' })
       if (SHARE && !CONTINUATION) complete = record({ type: 'dm', target: SHARE_TARGET, note: FINAL.slice(0, 40), auto: true, share: true, operationId }).code === 0
     }
   } catch { complete = false }
