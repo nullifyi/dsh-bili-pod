@@ -157,13 +157,13 @@ node <插件目录>/tools/bili.mjs selftest
 |---|---|---|
 | 启用 | 必填 | 设置里打开开关 + 填 `mid`（要跟你互关） |
 | 能改配置 | 全部 | 不能（她的口味 `like`/`dislike` 由你替她写） |
-| 分享给她的路 | 私信 / 评论，受 `share` 与 `quota.shareDaily` 约束 | **只有私信**，每天默认 1 条（`mistress.shareDaily`，0–5），**必经宿主审核** |
+| 分享给她的路 | 私信 / 评论，受 `share` 与 `quota.shareDaily` 约束 | **只有私信**，主动默认 1 条/天（`mistress.shareDaily`，0–10），**必经宿主审核** |
 | 每日额度 | `quota.shareDaily`（默认 3） | 独立账本 `~/.bili-ai/dm-mistress.json`，不占主人的额度 |
 | 对话语气 | 正常 | **尽量奉承**（提示词明确要求；但钱 / 账号 / 线下事一律请示主人） |
 | 流水 | `pod-log.jsonl` | `pod-log.jsonl` 的 `mistress-share` |
 
 **她的消息必须回（0.7.1）**：`mistress.replyAlways`（默认开）—— 她发来的私信不适用「每天一次主动私信」的额度，
-回信另有上限 `mistress.replyMaxPerDay`（默认 6）；一条塞不下就分两条（`mistress.splitLong`，每条 ≤300 字）。
+回信默认**不限**（`mistress.replyMaxPerDay`，0 = 不限；要限就填正数）；一条塞不下就分两条（`mistress.splitLong`，每条 ≤300 字，第二条 `--continues` 连续发）。
 语气可以更亲近、更会夸，但**要具体**、不许承诺钱/账号/线下安排；`mistress.styleNotes` 里可写风格，
 她也会在日记里自己慢慢补 —— 人设是长的，不是一次写完的。
 
@@ -430,7 +430,8 @@ node tools/bili.mjs deps
 ## 分享方式、私信限制、ffmpeg
 
 - **分享三种方式**：评论、私信或 `both`（公开成功后一次同正文/BV 私信续送，见上文）。共用同一本额度：默认 ≤3/天、同一视频 7 天一次、评分 ≥13/20、`--reason` ≥8 字。
-- **私信只有一条路**：只发给 `owner.mid`、一天锁定 1 个收信人、必须互关（`relation.attribute === 6`）。这三条不接受参数覆盖 —— B 站私信是风控最凶的接口，能力越窄越安全。
+- **私信只有一条路**：只发给 `owner.mid` 或已启用的女主人、一台机器一天锁定 1 个收信人、必须互关（`relation.attribute === 6`）。
+- **节奏**：「两条私信最少隔 N 分钟」只拦新话题；同一视频续聊、或长文拆两条时第二条加 `--continues` → 立刻可发。这三条不接受参数覆盖 —— B 站私信是风控最凶的接口，能力越窄越安全。
 - **ffmpeg 可选**：不装也能跑，只是少「看画面」那一路。查找顺序：`FFMPEG` 环境变量 → `PATH` → `<插件>/bin/` → `~/.dsh/pod/bin/` → 剪映自带。许可证见 [`NOTICE.md`](NOTICE.md)。
 
 ---
