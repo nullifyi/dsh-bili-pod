@@ -41,7 +41,12 @@ if(scenario==='default-review') {
  const approve=()=>new Promise((resolve,reject)=>{const req=Readable.from([Buffer.from(JSON.stringify({id}))]);Object.assign(req,{method:'POST',headers:{host:'127.0.0.1'}});routes.get('/dsh-bili/api/pending/approve')(req,{writeHead(){},end:t=>resolve(JSON.parse(t))}).catch(reject)})
  const results=await Promise.all([approve(),approve()]);assert.equal(dmPosts().length,1)
  if(scenario==='host-once'){assert.equal(results.filter(x=>x.status==='accepted').length,1);assert.equal(JSON.parse(fs.readFileSync(PENDING_FILE)).items.length,0)}
- else {assert.equal(JSON.parse(fs.readFileSync(PENDING_FILE)).items[0].status,'uncertain');assert.equal((await approve()).ok,false);assert.equal(dmPosts().length,1)}
+ else {
+  // 0.8.0：结果不明 → 允许「对账后重试」，所以再点一次会真的再发一次（不再永远卡住）
+  assert.equal(JSON.parse(fs.readFileSync(PENDING_FILE)).items[0].status,'uncertain')
+  assert.equal((await approve()).ok,false)
+  assert.equal(dmPosts().length,2)
+}
  clean()
 } else {
  const op=source()

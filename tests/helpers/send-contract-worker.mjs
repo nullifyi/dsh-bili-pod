@@ -76,9 +76,15 @@ if (scenario === 'draft') {
   const first = await approve()
   const queue = JSON.parse(fs.readFileSync(pendingPath)).items
   if (['host-timeout', 'host-receipt'].includes(scenario)) { assert.equal(first.ok, true, JSON.stringify(first)); assert.equal(first.rpid, '9007199254740993'); assert.equal(queue.length, 0) }
-  else if (scenario === 'host-uncertain') { assert.equal(first.status, 'uncertain'); assert.equal(queue[0].status, 'uncertain'); await approve() }
+  else if (scenario === 'host-uncertain') {
+    // 0.8.0：结果不明之后允许「对账 → 重试」，所以第二次点「发」会真的再试一次（不再永远报同一句错）
+    assert.equal(first.status, 'uncertain'); assert.equal(queue[0].status, 'uncertain')
+    const again = await approve()
+    assert.equal(again.status, 'uncertain', JSON.stringify(again))
+    assert.equal(requests().filter(x => x.method === 'POST').length, 2)
+  }
   else { assert.equal(first.status, 'rejected'); assert.equal(queue[0].status, 'pending') }
-  assert.equal(requests().filter(x => x.method === 'POST').length, 1)
+  if (scenario !== 'host-uncertain') assert.equal(requests().filter(x => x.method === 'POST').length, 1)
   if (['host-timeout', 'host-receipt'].includes(scenario)) {
     const posted = requests().find(x => x.method === 'POST'); assert.equal(new URLSearchParams(posted.body).get('type'), '11')
     assert.ok(JSON.parse(fs.readFileSync(sentPath)).items.length)

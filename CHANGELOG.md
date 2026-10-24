@@ -1,3 +1,17 @@
+## 0.8.0 — 2026-10-24
+
+**修：草稿「正在发送或结果不明」永久卡死**
+
+- 现象：点「发」只报「草稿不存在、正在发送或结果不明；请先人工核对」，再点也还是这句。
+- 根的三个 bug：
+  1. 私信 CLI 成功时打的是 `✓ 已发送（HTTP 200）`，宿主只认 `code=0` → 成功的私信被记成 uncertain；
+  2. uncertain 是终态：`claimDraft` 拒绝一切非 pending 草稿，没有对账/重试入口；
+  3. 双击「发」（两个请求并发）时会发两条 —— claim 之后操作状态先是 `approved` 再变 `sending`，中间窗口被当成「旧状态」重置。
+- 修：新增 `reconcileDraft()`（lib/comment-state.mjs）—— accepted → 判为已发并清队列；rejected / uncertain / 超时 2 分钟的 sending → 拉回 pending，记 `lastStatus`；真正在途（approved/sending 且新鲜）拒绝操作。
+  `/pending` 每次读取自动对账；`/pending/approve` 卡住时先对账再重试；私信收据识别补 `✓ 已发送`。
+  设置页草稿上会显示「上次发送结果不明（uncertain），已恢复可重试 —— 若 B 站上已经收到，重发前先看一眼」。
+- 测试：新增 `tests/reconcile.test.mjs` 4 例；`send-contract` / `dm-review-continuation` 按新语义（uncertain 可重试）更新。全量 **204/204**。
+
 ## 0.7.9 — 2026-10-24
 
 「我明明跑过 selftest，为什么每轮都提醒」—— 因为它看的不是同一个文件。
