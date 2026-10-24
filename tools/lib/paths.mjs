@@ -53,7 +53,7 @@ export const credentialsPath = homePath('.bili-ai', 'credentials.json')
  * 运行状态目录（0.7.0）：`<workDir>/state`，与 lib/state-dir.mjs 同一套解析。
  * 她跑一轮时 cwd 就是 workDir —— 状态放在这里，写入就不会越出 workspace-write 沙箱，
  * 不再每条草稿/配额都弹一次「允许吗」。
- * 凭据（credentials.json）与人设（persona.md）仍留在 ~/.bili-ai。
+ * 凭据与旧人设原件留在 ~/.bili-ai；当前人设由宿主 lib/store.mjs 定位到 DSH_HOME。
  */
 export const STATE_DIR = stateDir(workDir)
 export const stateFile = (name) => statePath(name, workDir)

@@ -12,6 +12,10 @@
 
 ---
 
+## 人设加载（0.8.3）
+
+完整人设正文、按场景选取的语气参考和按需查询的日记分别加载。支持 DSH 原生工作区指令，也保留完整消息注入的兼容模式；不再静默截断前 3000 字符。源文件更新后无需为普通编辑重启应用。详见[人设加载说明](docs/PERSONA-LOADING.md)。
+
 ## 0.7.5 修复与桌面补丁
 
 包含迁移后的会话续接、手动唤醒结果回传和主人私信限频区分。
@@ -393,7 +397,8 @@ node tools/bili.mjs comment --oid … --message … --go   # 手动发一条
 |---|---|---|
 | `~/.dsh/pod.config.json` | 设置（不含凭据） | 旧版 `bili-whale.config.json` 第一次启动时会自动导入 |
 | `~/.bili-ai/credentials.json` | `SESSDATA` / `bili_jct` / `buvid3` | 0600；**永远不回显**；换机器拷 `.bili-ai` 就带着走 |
-| `~/.bili-ai/persona.md` | 人设正文（前 3000 字进提示） | 设置页可注入；和「名字/自称」冲突时以文件为准 |
+| `$DSH_HOME/pod-persona.md` | 完整人设源文件 | 旧 `~/.bili-ai/persona.md` 首次复制兼容；正文不再截断，语气参考按场景选取 |
+| `<pod-work>/AGENTS.md` | 工作区人设投影 | workspace 模式由 DSH 原生指令加载；只更新鲸群标记区，保留已有内容 |
 | `~/.dsh/pod-diary/` | 日记文件夹（daily / owner / archive / records） | 见上 |
 | `~/.dsh/pod-work/` | 她的会话工作目录 + `rounds/` 账本 + `artifacts/` + `scope.json` | 别拿用户主目录当工作区 |
 | `~/.dsh/pod-night.json` | 今天的计划与窗口历史 | 删掉 = 重新排 |

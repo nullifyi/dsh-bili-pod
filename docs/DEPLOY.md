@@ -37,7 +37,7 @@
 | 产出物 | `~/.dsh/pod-work/artifacts/`（默认关） | ❌ 写过才有 |
 | 扩展 | `~/.dsh/pod-work/extensions.json` + 各 `ext` 目录 | 部分是 |
 | 日记 | `~/.dsh/pod-diary/`（`daily/` `owner/` `records/` `archive/`） | ❌ 她的记忆本体 |
-| 人设 | `~/.bili-ai/persona.md` | 可重写，但建议搬 |
+| 人设 | `$DSH_HOME/pod-persona.md` | 旧 `~/.bili-ai/persona.md` 首次复制兼容；存档仍使用 `home/persona.md` |
 | 凭据 | `~/.bili-ai/credentials.json` | ✅ 扫码即可 |
 
 > `~/.dsh` 可能是指向别处的 junction（本机就是 `F:\dsh\DSH_HOME`）。
