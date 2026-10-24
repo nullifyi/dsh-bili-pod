@@ -10,14 +10,16 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { dshPath } from '../lib/paths.mjs'
+import { dshPath, configPath, credentialsPath, stateFile } from '../lib/paths.mjs'
 import { NODE_EXE } from '../lib/nodebin.mjs'   // 2026-10-21：别用 process.execPath（Electron 里它是主程序 ✗）
 
 
 const HOME = (process.env.USERPROFILE || process.env.HOME || '/')
 const DSH = dshPath()
-const CFG = path.join(DSH, 'bili-pod.config.json')
-const CRED = path.join(HOME, '.bili-ai', 'credentials.json')
+// 0.7.9：配置文件名 0.7.0 起是 pod.config.json；这里曾经写死旧名 bili-pod.config.json →
+// 永远报「没有配置文件」→ 测试不通过 → 不写 passed 标记 → 她每轮都提醒「selftest 还没跑」。
+const CFG = configPath
+const CRED = credentialsPath
 const OK = '✓'
 const NO = '✗'
 const WARN = '!'
@@ -100,8 +102,7 @@ console.log('')
 // 2026-10-20：全绿时落个标记 —— 设置页和她的唤醒提示会用它在"还没测过"时提醒
 if (bad === 0) {
   try {
-    fs.mkdirSync(path.join(HOME, '.bili-ai'), { recursive: true })
-    fs.writeFileSync(stateFile('selftest-passed.json'), JSON.stringify({ at: new Date().toISOString() }, null, 2))
+    fs.writeFileSync(stateFile('selftest-passed.json'), JSON.stringify({ at: new Date().toISOString(), config: CFG }, null, 2))
   } catch {}
   console.log('══════════ 全部通过 ✓ 可以用了 ══════════')
   console.log('  想立刻看她跑一轮：设置页 →「生物钟」→ 把窗口改成现在之后 2 分钟 → 等她自己醒\n')

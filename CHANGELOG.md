@@ -1,3 +1,20 @@
+## 0.7.9 — 2026-10-24
+
+「我明明跑过 selftest，为什么每轮都提醒」—— 因为它看的不是同一个文件。
+
+### 修
+- `selftest` 检查配置文件时还在找 0.7.0 之前的旧名 `bili-pod.config.json`，而实际文件是 `pod.config.json`
+  → 永远报「没有配置文件」→ 退出码 1 → **不写 `selftest-passed.json`** → 唤醒提示每轮都再提醒一遍（连「会话要给完全访问」那行也一起重播）。
+  现在统一用 `tools/lib/paths.mjs` 的 `configPath` / `credentialsPath` / `stateFile`，跟宿主和命令层同一套解析。
+- `selftest` 的两个目录检查改成真实判断（存在才 ✓，不再无条件 ✓）。
+- 通过标记里多记一个 `config` 字段，方便日后排查「测的是哪个配置」。
+
+### 说明
+- 「完全访问」那行和 selftest 提示是同一段文案；它的触发条件只有「没有通过标记」。你早就把会话设成 `danger-full-access`（会话日志 seq144 有记录），是我们一直没写标记才看起来像没做。
+
+### 测试
+- 200/200；手动跑 `node tools/bili.mjs selftest` → 13 项全绿、退出码 0、写入 `<pod-work>/state/selftest-passed.json`。
+
 ## 0.7.8 — 2026-10-24
 
 「主动私信已发 26 条」—— 那 26 条里大半是她回你的，不是她主动找你。
