@@ -299,6 +299,17 @@ test('taste: selfAdjust and learnFromInterest default on, and survive merge', as
   assert.equal(DEFAULTS.preferences.selfAdjust, true)
 })
 
+// ── 私信主动额度（0.8.1）：不再只看 --share，plain notify 也要算
+test('dm proactive cap: counts every proactive send and refuses at the limit', async () => {
+  const { proactiveCap } = await import('../lib/dm-limits.mjs')
+  assert.equal(proactiveCap({ used: 0, cap: 10 }).blocked, false)
+  assert.equal(proactiveCap({ used: 9, cap: 10 }).next, 10)
+  const over = proactiveCap({ used: 21, cap: 10 })
+  assert.equal(over.blocked, true)
+  assert.match(over.reason, /21 条（上限 10）/)
+  assert.equal(proactiveCap({ used: 3, cap: 0 }).blocked, true)
+})
+
 test('store: creates pod.config.json, imports legacy whale config once', async (t) => {
   const home = tmp(t, 'home')
   const dsh = path.join(home, '.dsh')

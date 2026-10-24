@@ -22,6 +22,7 @@ import { reviewDecision, reserveAuto, settleAuto, dmGapBlocks, dmSameThread } fr
 import { STATE_DIR } from '../lib/paths.mjs'
 import { addDraft, coordinates, checkApproval, beginSend, finishSend, claimShareContinuation, finishShareContinuation } from '../../lib/comment-state.mjs'
 import { stateFile } from '../lib/paths.mjs'
+import { proactiveCap } from '../../lib/dm-limits.mjs'
 import { workDir } from '../lib/paths.mjs'
 import { readScope } from '../../lib/scope.mjs'
 
@@ -270,14 +271,17 @@ const sameDay = q.date === today()
 const usedAll = sameDay ? Number(q.count ?? 0) : 0
 // 老账本没有 shares 字段 → 从 0 起算（宁可今天多给一点余量，也不要把回信算成打扰）
 const usedShares = sameDay ? Number(q.shares ?? 0) : 0
+// 0.8.1：主动额度要算「所有主动私信」，不只是 --share。
+//   以前 notify（不走 --share）和续聊都能绕开上限，主人看到她一天发 21 条还报「上限 10」。
+const usedProactive = sameDay ? Number(q.proactive ?? q.shares ?? 0) : 0
 const usedReplies = sameDay ? Number(q.replies ?? 0) : 0
 const used = usedShares
 // 0.7.5：私信自己也有日上限与最小间隔（这两个设置以前只写在默认值里、从没生效过）。
 //   回复私信（--reply，女主人发来消息）不受日上限约束 —— 人家来问，总得让回。
-if (SHARE && !IS_MISTRESS && !REPLY && !DRY && !CONTINUATION) {
+if (!IS_MISTRESS && !REPLY && !DRY && !CONTINUATION) {
   const cap = Math.max(0, Math.floor(Number(cfg.dm?.maxPerDay ?? 1)))
-  if (cap <= 0) { console.error('✗ 私信每天条数上限是 0 —— 去设置里调大（或先用草稿手动发）'); process.exit(4) }
-  if (used >= cap) { console.error(`✗ 今天主动私信（分享）已发 ${used} 条（上限 ${cap}）—— 回信不占这个额度；要发更多就调高「私信·每天条数」或等明天`); process.exit(4) }
+  const verdict = proactiveCap({ used: usedProactive, cap })
+  if (verdict.blocked) { console.error(`✗ ${verdict.reason} —— 回信不占这个额度；要发更多就调高「私信·每天条数」或等明天`); process.exit(4) }
   const gapMin = Math.max(0, Math.floor(Number(cfg.dm?.minGapMinutes ?? 240)))
   const lastAt = Date.parse(String(q.at ?? ''))
   // 「相关/连续」的消息不受间隔限制：同一轮写的（摘要 + 分享）、同一个视频的续聊、或拆分长文（--continues）。
@@ -316,7 +320,9 @@ if (IS_MISTRESS && REPLY) {
 
 console.log(`[dm] ${meInfo.uname} → ${RECIPIENT_NAME}（mid ${ONLY_TO}）${IS_MISTRESS ? (REPLY ? ' · 女主人回复（不占主动额度，过审核）' : ' · 女主人通道（主动 10 条/天、回复不限、过审核）') : ''}`)
 console.log(`  正文 ${FINAL.length} 字：${FINAL.slice(0, 80)}${FINAL.length > 80 ? '…' : ''}`)
-console.log(`  互关 ✓  ·  今天主动第 ${(IS_MISTRESS ? mistressUsed : usedShares) + 1} 条（上限 ${IS_MISTRESS ? Math.max(0, Number(cfg.mistress?.shareDaily ?? 1)) : Math.max(0, Math.floor(Number(cfg.dm?.maxPerDay ?? 1)))} 条/天 ✓ 锁定给 ${RECIPIENT_NAME} ✓）`)
+console.log(REPLY
+  ? `  互关 ✓  ·  回信（不占主动额度 ✓）`
+  : `  互关 ✓  ·  今天主动第 ${(IS_MISTRESS ? mistressUsed : usedProactive) + 1} 条（上限 ${IS_MISTRESS ? Math.max(0, Number(cfg.mistress?.shareDaily ?? 1)) : Math.max(0, Math.floor(Number(cfg.dm?.maxPerDay ?? 1)))} 条/天 ✓ 锁定给 ${RECIPIENT_NAME} ✓）`)
 
 if (!GO && !DRY) { console.error('✗ 必须给 --dry 或 --go'); process.exit(2) }
 
@@ -389,7 +395,8 @@ if (r.http >= 200 && r.http < 300 && r.code === 0) {
       saveQ({
         date: today(),
         count: usedAll + 1,
-        shares: REPLY ? usedShares : usedShares + 1,   // 回信不计入主动
+        proactive: REPLY ? usedProactive : usedProactive + 1,   // 所有主动私信都计入（不只是 --share）
+        shares: REPLY ? usedShares : usedShares + 1,   // 分享单（--share）另计一本
         replies: REPLY ? usedReplies + 1 : usedReplies,
         mid: ONLY_TO, at: new Date().toISOString(),
         bvid: targetBV ?? '', round: readScope(workDir)?.round ?? '',
@@ -402,7 +409,7 @@ if (r.http >= 200 && r.http < 300 && r.code === 0) {
     console.log(`  ✓ 已发送（HTTP ${r.http}） · 复用原分享额度，不重复计账${complete ? '' : '；本地DM计数未完成，勿重发'}`)
   } else {
     finish('accepted', { accountingStatus: complete ? 'complete' : 'incomplete' })
-    console.log(`  ✓ 已发送（HTTP ${r.http}）${SHARE ? ' · 已记入分享额度 ✓' : ' · 回复不占分享额度 ✓'}${complete ? '' : '；本地记账未完成，勿重发'}`)
+    console.log(`  ✓ 已发送（HTTP ${r.http}）${SHARE ? ' · 已记入分享额度 ✓' : REPLY ? ' · 回复不占主动额度 ✓' : ' · 已记入主动额度 ✓'}${complete ? '' : '；本地记账未完成，勿重发'}`)
   }
   process.exit(0)
 }
