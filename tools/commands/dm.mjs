@@ -238,7 +238,7 @@ if (STATUS) {
   console.log(`账号: ${meInfo.uname}（mid ${meInfo.mid}）`)
   console.log(`专属对象: ${OWNER_NAME}（mid ${OWNER || '未配置'}）${MISTRESS_MID ? ` · ${MISTRESS_TITLE}: ${cfg.mistress?.name ?? ''}（mid ${MISTRESS_MID}）` : ''}`)
   console.log(`今天锁定给: ${lockedToday || '（还没发过）'}${lockedToday && !RECIPIENTS.includes(lockedToday) ? '  ⚠️ 和当前配置不一致 ✗' : ''}`)
-  console.log(`今日已发: ${q.date === today() ? Number(q.count ?? 0) : 0} 条（**条数不限** ✓ 只限收信人 ✓）`)
+  console.log(`今日主动: ${q.date === today() ? Number(q.shares ?? 0) : 0} 条 · 回信: ${q.date === today() ? Number(q.replies ?? 0) : 0} 条（主动受每日上限，回信不占）`)
   console.log(`互关状态: attribute=${rel.attribute} ${rel.attribute === 6 ? '（✓ 互关，可以发）' : '（✗ 不是互关，发不出去）'}`)
   for (const line of relationLines(rel, meInfo)) console.log(line)
   if (!rel.ok) process.exit(3)
@@ -263,13 +263,21 @@ if (REQUIRE_MUTUAL && rel.attribute !== 6) {
 }
 
 const q = loadQ()
-const used = q.date === today() ? Number(q.count ?? 0) : 0
+// 0.7.8：主动私信 和 回信 必须分开记账。
+//   以前只有一个 count：回她的、回主人的、主动分享的，全塞进同一个数字 →
+//   她回了几条消息就把「主动私信额度」吃光了（今天显示 26 条，其实大半是回信）。
+const sameDay = q.date === today()
+const usedAll = sameDay ? Number(q.count ?? 0) : 0
+// 老账本没有 shares 字段 → 从 0 起算（宁可今天多给一点余量，也不要把回信算成打扰）
+const usedShares = sameDay ? Number(q.shares ?? 0) : 0
+const usedReplies = sameDay ? Number(q.replies ?? 0) : 0
+const used = usedShares
 // 0.7.5：私信自己也有日上限与最小间隔（这两个设置以前只写在默认值里、从没生效过）。
 //   回复私信（--reply，女主人发来消息）不受日上限约束 —— 人家来问，总得让回。
 if (SHARE && !IS_MISTRESS && !REPLY && !DRY && !CONTINUATION) {
   const cap = Math.max(0, Math.floor(Number(cfg.dm?.maxPerDay ?? 1)))
   if (cap <= 0) { console.error('✗ 私信每天条数上限是 0 —— 去设置里调大（或先用草稿手动发）'); process.exit(4) }
-  if (used >= cap) { console.error(`✗ 今天主动私信已发 ${used} 条（上限 ${cap}）—— 调高「私信·每天条数」或等明天`); process.exit(4) }
+  if (used >= cap) { console.error(`✗ 今天主动私信（分享）已发 ${used} 条（上限 ${cap}）—— 回信不占这个额度；要发更多就调高「私信·每天条数」或等明天`); process.exit(4) }
   const gapMin = Math.max(0, Math.floor(Number(cfg.dm?.minGapMinutes ?? 240)))
   const lastAt = Date.parse(String(q.at ?? ''))
   // 「相关/连续」的消息不受间隔限制：同一轮写的（摘要 + 分享）、同一个视频的续聊、或拆分长文（--continues）。
@@ -308,7 +316,7 @@ if (IS_MISTRESS && REPLY) {
 
 console.log(`[dm] ${meInfo.uname} → ${RECIPIENT_NAME}（mid ${ONLY_TO}）${IS_MISTRESS ? (REPLY ? ' · 女主人回复（不占主动额度，过审核）' : ' · 女主人通道（主动 10 条/天、回复不限、过审核）') : ''}`)
 console.log(`  正文 ${FINAL.length} 字：${FINAL.slice(0, 80)}${FINAL.length > 80 ? '…' : ''}`)
-console.log(`  互关 ✓  ·  今天第 ${(IS_MISTRESS ? mistressUsed : used) + 1} 条（上限 ${IS_MISTRESS ? Math.max(0, Number(cfg.mistress?.shareDaily ?? 1)) : Math.max(0, Math.floor(Number(cfg.dm?.maxPerDay ?? 1)))} 条/天 ✓ 锁定给 ${RECIPIENT_NAME} ✓）`)
+console.log(`  互关 ✓  ·  今天主动第 ${(IS_MISTRESS ? mistressUsed : usedShares) + 1} 条（上限 ${IS_MISTRESS ? Math.max(0, Number(cfg.mistress?.shareDaily ?? 1)) : Math.max(0, Math.floor(Number(cfg.dm?.maxPerDay ?? 1)))} 条/天 ✓ 锁定给 ${RECIPIENT_NAME} ✓）`)
 
 if (!GO && !DRY) { console.error('✗ 必须给 --dry 或 --go'); process.exit(2) }
 
@@ -378,7 +386,14 @@ if (r.http >= 200 && r.http < 300 && r.code === 0) {
         }) + '\n')
       } catch { /* 事件流丢了不影响发送结果 */ }
     } else {
-      saveQ({ date: today(), count: used + 1, mid: ONLY_TO, at: new Date().toISOString(), bvid: targetBV ?? '', round: readScope(workDir)?.round ?? '' })
+      saveQ({
+        date: today(),
+        count: usedAll + 1,
+        shares: REPLY ? usedShares : usedShares + 1,   // 回信不计入主动
+        replies: REPLY ? usedReplies + 1 : usedReplies,
+        mid: ONLY_TO, at: new Date().toISOString(),
+        bvid: targetBV ?? '', round: readScope(workDir)?.round ?? '',
+      })
       if (SHARE && !CONTINUATION) complete = record({ type: 'dm', target: SHARE_TARGET, note: FINAL.slice(0, 40), auto: true, share: true, operationId }).code === 0
     }
   } catch { complete = false }
