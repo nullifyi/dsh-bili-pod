@@ -138,7 +138,11 @@ if (TO_ARG) {
   ONLY_TO = TO_ARG
 }
 const IS_MISTRESS = ONLY_TO === MISTRESS_MID
-const REPLY = argv.includes('--reply')   // 回女主人发来的消息：不计主动私信额度，另有回复上限
+// 0.8.2：回复由「她发来的消息」触发时，不管有没有手动带 --reply 都不该吃主动额度。
+//   以前 dmTick 的提示里写了 --reply，但她常常直接 `dm --msg … --go`，
+//   一天 25 条对话全记成「主动私信」，把 10 条额度瞬间吃光 —— 主人才看到「额度被耗光」。
+const roundReason = (() => { try { return readScope(workDir)?.reason ?? '' } catch { return '' } })()
+const REPLY = argv.includes('--reply') || roundReason === 'dm'   // 回私信：不计主动额度，另有回复上限
 const RECIPIENT_NAME = IS_MISTRESS ? String(cfg.mistress?.name ?? cfg.mistress?.title ?? '女主人') : OWNER_NAME
 const MISTRESS_TITLE = String(cfg.mistress?.title ?? '女主人')
 const REQUIRE_MUTUAL = true      // ③ 必须互关
