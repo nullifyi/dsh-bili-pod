@@ -90,6 +90,19 @@ if(scenario==='session') {
   await sched.tick();assert.equal(prompts.length,scenario==='not-accepted'?1:0)
   assert.equal(events.some(([e])=>e==='round:delivered'),false)
   assert.equal(JSON.parse(fs.readFileSync(path.join(dsh,'pod-night.json'))).fired,false)
+} else if(scenario==='owner-dm-order') {
+  config.owner={mid:'222',name:'Owner'}
+  config.listen={comment:false,dm:true,allDay:true}
+  fs.writeFileSync(process.env.BILI_POD_CONFIG,JSON.stringify(config))
+  const job=sched.dmTick();while(!releaseIO)await new Promise(r=>setImmediate(r))
+  releaseIO();await job
+  assert.equal(prompts.length,1)
+  const text=prompts[0].content[0].text
+  assert.match(text,/本轮预算/)
+  assert.match(text,/--go/)
+  assert.match(text,/日记/)
+  assert.match(text,/本轮权限/)
+  assert.ok(text.trim().endsWith('hello'),'the owner message must be last, after execution instructions')
 } else {
   config.listen={comment:scenario!=='stop-dm',dm:scenario==='stop-dm',allDay:!['tide-listen','tide-double-listen'].includes(scenario),scope:'reply'}
   config.night={mode:'tide',windows:[{start:'12:00',end:'13:00',wakes:1}],tide:{activeStart:'22:00',activeEnd:'06:00',peakStart:'23:00',peakEnd:'01:00',valleyStart:'02:00',valleyEnd:'03:00'}}

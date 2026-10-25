@@ -123,7 +123,7 @@ test('late timed-out disposer cannot remove a replacement instance registrations
   await h.close();assert.equal(fs.readFileSync(trace,'utf8'),'oldticknew')
 })
 
-for (const scenario of ['session', 'create-failure', 'prompt-failure', 'not-accepted', 'scope-failure', 'stop-listen', 'stop-dm', 'tide-listen', 'tide-double-listen', 'plugin-lifecycle']) {
+for (const scenario of ['session', 'create-failure', 'prompt-failure', 'not-accepted', 'scope-failure', 'stop-listen', 'stop-dm', 'owner-dm-order', 'tide-listen', 'tide-double-listen', 'plugin-lifecycle']) {
   test(`runtime boundary: ${scenario}`, t => {
     const env = sandbox(t); env.TEST_RUNTIME_CASE = scenario
     const r = run(env, 'tests/helpers/runtime.mjs'); assert.equal(r.status, 0, r.stderr + r.stdout)
