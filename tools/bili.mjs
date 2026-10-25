@@ -37,6 +37,7 @@ const map = {
   selftest: ['commands/selftest.mjs', '启动测试（装完先跑这个）：配置/凭据/登录态/目录/ffmpeg + 下一步两件事'],
   deps: ['commands/deps.mjs', '依赖体检（装完先跑它）：cookie / ffmpeg / Node / 数据目录；--json 给 agent 判断'],
   diary: ['commands/diary.mjs', '日记文件夹：show 摘要 / today / log / archive 归档并摘记录 / recall 翻旧账 / tail'],
+  persona: ['commands/persona.mjs', '人设统一入口：info 看源与版本 / show 全文 / save --file 完整修改稿 / import-legacy 显式导入旧源'],
   records: ['commands/records.mjs', '分类记录库：list（各分类条目数）/ add 手记一条 / show <分类> / index 重建总索引'],
   ledger: ['commands/ledger.mjs', '账本：write 落一份 / list / show <day>/<file> / verify 查哈希链 / index'],
   verify: ['commands/verify-now.mjs', '复核最近发出的评论「公开可见没有」（看不到 ≠ 没发出，只写「没查到」）'],

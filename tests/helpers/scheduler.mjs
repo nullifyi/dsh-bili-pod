@@ -18,7 +18,7 @@ const workDir=path.join(dsh,'pod-work'),diaryRoot=path.join(dsh,'pod-diary')
 fs.mkdirSync(workDir,{recursive:true});fs.mkdirSync(diaryRoot,{recursive:true})
 const cfg={night:{windows:[{start:'23:00',end:'01:00',wakes:1}],skipChance:0},listen:{comment:false,dm:false,live:false},diary:{push:false}}
 fs.writeFileSync(process.env.BILI_POD_CONFIG,JSON.stringify(cfg))
-const persona=path.join(process.env.USERPROFILE,'.bili-ai/persona.md')
+const persona=path.join(dsh,'pod-persona.md')
 fs.writeFileSync(persona,'测试专属人设')
 const host={
   readConfig:()=>store.readConfig(),

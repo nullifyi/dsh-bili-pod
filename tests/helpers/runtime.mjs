@@ -28,7 +28,7 @@ const dsh = process.env.DSH_HOME, work = process.env.BILI_POD_WORK, diary = proc
 const config = { night: { windows: [{start:'00:00',end:'04:00',wakes:1}],skipChance:0 }, listen: {comment:false,dm:false,live:false}, diary:{push:false}, review:{verify:false} }
 fs.writeFileSync(process.env.BILI_POD_CONFIG,JSON.stringify(config))
 fs.mkdirSync(work,{recursive:true}); fs.mkdirSync(diary,{recursive:true})
-fs.writeFileSync(path.join(process.env.HOME,'.bili-ai/persona.md'),'persona sentinel')
+fs.writeFileSync(path.join(dsh,'pod-persona.md'),'persona sentinel')
 const scope = await import('../../lib/scope.mjs')
 const store = await import('../../lib/store.mjs')
 const controller = {
