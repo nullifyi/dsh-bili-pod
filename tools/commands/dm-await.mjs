@@ -53,7 +53,17 @@ async function main() {
   const collected=[]
   for(const t of talkers) {
    const cursor={lastSeen:s.seen[t.mid],lastKey:s.keys[t.mid],lastKeys:s.lastKeysByTalker[t.mid]}
-   const result=await readHistory(t.mid,headers,cursor,{baseline:argv.includes('--baseline')})
+   let result
+   // 2026-10-26：每个收信人独立容错。以前某一个人读失败（比如刚启用、还没会话）会让整轮抛错，
+   //   主人的私信也一起漏掉。现在逐人 try/catch：坏的那个保留游标、下一轮再试，其他人照常。
+   try { result=await readHistory(t.mid,headers,cursor,{baseline:argv.includes('--baseline')}) }
+   catch(e){
+    // 主人是主通道：读不了就按失败处理（保游标、exit 3），不要让别的收信人把异常吞掉。
+    if(t.role==='owner')throw e
+    // 女主人等副通道：出错只跳过她，不影响主人这一轮。
+    console.error('[dm] '+(t.role==='mistress'?'女主人':'副收信人')+'的私信历史本轮读不了：'+String(e.message).slice(0,160))
+    continue
+   }
    if(argv.includes('--baseline')) {
     const latest=result.all.at(-1),ts=latest?.ts??0
     s.seen[t.mid]=ts;s.keys[t.mid]=latest?.key;s.lastKeysByTalker[t.mid]=result.all.filter(r=>r.ts===ts).map(r=>r.key)

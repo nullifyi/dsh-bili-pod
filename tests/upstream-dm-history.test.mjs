@@ -82,3 +82,13 @@ test('legacy multi-talker state retains both recipients; shared cards arrive in 
  b.put({talkers:{222:page([row(2,1002,111),row(1,1000)]),333:page([{...row(3,1001,333),msg_type:8,content:JSON.stringify({title:'分享卡片',jump_url:'https://www.bilibili.com/video/BV13xnt6QE6s'})}])}})
  const a=b.peek();assert.equal(a.role,'owner');assert.equal(b.run('--ack',a.receipt).status,0);const c=b.peek();assert.equal(c.role,'mistress');assert.equal(c.mid,'333');assert.match(c.text,/BV13xnt6QE6s/);assert.equal(b.read().lastIncomingByTalker['222'],1000);assert.equal(b.read().lastIncomingByTalker['333'],1001);assert.equal(b.run('--ack',c.receipt).status,0);assert.equal(b.run('--peek').status,1)
 })
+
+test('a recipient with no DM session yet does not block the owner channel',t=>{
+ const b=box(t)
+ fs.writeFileSync(path.join(b.home,'.dsh/pod.config.json'),JSON.stringify({owner:{mid:'222'},mistress:{enabled:true,mid:'333',name:'她',title:'女主人'}}))
+ b.save({owner:'222',lastSeen:900})
+ b.put({talkers:{'222':{pages:{'0':page([row(2,1001)])}},'333':{code:0,data:{}}}})
+ const a=b.peek();assert.equal(a.text,'message 2');assert.equal(a.role,'owner')
+ assert.equal(b.run('--ack',a.receipt).status,0)
+ assert.equal(b.run('--once','--peek').status,1)
+})

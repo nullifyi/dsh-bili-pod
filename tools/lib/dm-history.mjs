@@ -27,8 +27,14 @@ export async function readHistory(owner,headers,state,{baseline=false}={}) {
     const query=signWbi({talker_id:owner,session_type:1,size:30,begin_seqno:cursor},nav.data.wbi_img)
     const response=await fetch('https://api.vc.bilibili.com/svr_sync/v1/svr_sync/fetch_session_msgs?'+query,{headers})
     const body=await exactJson(response)
-    if(!response.ok||body.code!==0||!Array.isArray(body.data?.messages))throw Error('私信历史读取失败，保留游标（code='+body.code+'）')
-    const rows=body.data.messages.map(normalizeMessage)
+    if(!response.ok||body.code!==0)throw Error('私信历史读取失败，保留游标（code='+body.code+'）')
+    // 2026-10-26：跟某个账号「还没有过私信会话」时，B站 会返回 code=0 但 data 里没有 messages
+    //   （女主人刚启用就是这样）。以前把它当读取失败抛错 → dmTick 每 4 分钟失败一次，
+    //   主人的私信也跟着收不到了。没有 messages 只代表「这个 talker 没历史」，按空处理。
+    const rawMessages=body.data?.messages
+    if(rawMessages==null)break
+    if(!Array.isArray(rawMessages))throw Error('私信历史读取失败，保留游标（messages 不是数组）')
+    const rows=rawMessages.map(normalizeMessage)
     for(const row of rows)if(!seen.has(row.key)){seen.add(row.key);all.push(row)}
     // First run deliberately considers only the newest page; no unbounded historical replay.
     const more=body.data.has_more

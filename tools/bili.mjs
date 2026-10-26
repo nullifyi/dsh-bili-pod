@@ -72,6 +72,8 @@ const map = {
   'dm-await': ['commands/dm-await.mjs', '私信监听（只认主人；命中打印 DM_HIT）'],
   fav: ['commands/fav.mjs', '收藏（我想留着）：判据强制 · --list / --check / <BV> --reason … --dry|--go'],
   dm: ['commands/dm.mjs', '私信（专属通道）：一天只锁定 1 个收信人 · 只发主人 · 必须互关'],
+  'dm-image': ['commands/dm-image.mjs', '私信发一张表情包（图片消息，不占私信条数）：--file <图> 或 --sticker <名字> · --list 看本地表情'],
+  'face-set': ['commands/face-set.mjs', '换 B站 头像：--file <图> --dry|--go（multipart 直传 x/member/web/face/update）'],
   comment: ['commands/comment.mjs', '发一条视频评论；带 --root/--parent 就是二级回复；--verify 发完立刻复核'],
   'reply-draft': ['commands/reply-draft.mjs', '待审回复（发前审核）：add 进队列 / list / show / drop / take'],
   'comment-del': ['commands/comment-del.mjs', '删除自己发的一条评论（x/v2/reply/del，只能删自己的）'],

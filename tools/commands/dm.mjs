@@ -141,9 +141,12 @@ if (TO_ARG) {
 const IS_MISTRESS = ONLY_TO === MISTRESS_MID
 // 0.8.2：回复由「她发来的消息」触发时，不管有没有手动带 --reply 都不该吃主动额度。
 //   以前 dmTick 的提示里写了 --reply，但她常常直接 `dm --msg … --go`，
-//   一天 25 条对话全记成「主动私信」，把 10 条额度瞬间吃光 —— 主人才看到「额度被耗光」。
+// 0.7.5 起把「回私信」和「主动私信」分开记账，避免一天 25 条对话全记成「主动私信」，把 10 条额度瞬间吃光 —— 主人才看到「额度被耗光」。
+// 2026-10-26：女主人不吃这条捷径。她发来的消息要显式带 --reply；其余（包括第一条招呼）都算主动，走她自己的 shareDaily 账。
+// 2026-10-26 追加：--share 永远算主动。以前在 dm 轮里发分享会被 roundReason==='dm' 判成回信，
+//   分享额度那本账根本不扣（shares 只在非 REPLY 时才 +1），等于白嫖自己的限额。
 const roundReason = (() => { try { return readScope(workDir)?.reason ?? '' } catch { return '' } })()
-const REPLY = argv.includes('--reply') || roundReason === 'dm'   // 回私信：不计主动额度，另有回复上限
+const REPLY = argv.includes('--reply') || (roundReason === 'dm' && !IS_MISTRESS && !SHARE)   // 回私信：不计主动额度，另有回复上限
 const RECIPIENT_NAME = IS_MISTRESS ? String(cfg.mistress?.name ?? cfg.mistress?.title ?? '女主人') : OWNER_NAME
 const MISTRESS_TITLE = String(cfg.mistress?.title ?? '女主人')
 const REQUIRE_MUTUAL = true      // ③ 必须互关
@@ -307,7 +310,9 @@ if (!IS_MISTRESS && !REPLY && !DRY && !CONTINUATION) {
   }
 }
 // ① 一天只锁定 1 个收信人（条数不限 ✓）：如果今天已经发给过别人 → 拒
-if (ONE_TARGET_PER_DAY && q.date === today() && q.mid && String(q.mid) !== ONLY_TO) {
+// 女主人例外（2026-10-26）：她和主人是两本独立的账（dm-mistress.json 里有她自己的日上限），
+// 主人要的是「白天陪我说话、晚上去跟她打招呼」——按原来的锁定，今天跟主人说过一句就再也发不出第一条。
+if (ONE_TARGET_PER_DAY && !IS_MISTRESS && q.date === today() && q.mid && String(q.mid) !== ONLY_TO) {
   console.error(`✗ 今天已经锁定给 mid ${q.mid} 了 —— 一天只能锁定 1 个收信人（防刷量 ✗）`)
   process.exit(4)
 }
@@ -382,7 +387,19 @@ try {
 const finish = (status, details) => CONTINUATION ? finishShareContinuation(CONTINUATION, status, details) : finishSend(operationId, status, details)
 let r
 try { r = await send(ONLY_TO, FINAL) }
-catch(e) { finish('uncertain', {reason: String(e.message).slice(0,200)}); if (autoOpId) settleAuto(STATE_DIR, autoOpId, 'uncertain'); console.error('发送结果不明，请人工核对，勿重发'); process.exit(8) }
+catch(e) {
+  const why = String(e?.message ?? e)
+  finish('uncertain', {reason: why.slice(0,200)})
+  if (autoOpId) settleAuto(STATE_DIR, autoOpId, 'uncertain')
+  // 2026-10-26：本地预算/冷却拦下来的请求根本没上网，别再笼统报「结果不明」——
+  //   主人被这句误导了一上午，一直以为是被 B站 风控。
+  if (/预算|冷却|队列已满|相同操作/.test(why)) {
+    console.error(`✗ 没发出去：${why}（本地限额/节奏拦的，请求没上网，可以稍后原样重发）`)
+  } else {
+    console.error('[send 失败] ' + (e?.stack || e) + '\n发送结果不明，请人工核对，勿重发')
+  }
+  process.exit(8)
+}
 if (r.http >= 200 && r.http < 300 && r.code === 0) {
   finish('accepted', { code: 0, accountingStatus: 'pending' })
   if (autoOpId) settleAuto(STATE_DIR, autoOpId, 'accepted')
