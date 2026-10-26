@@ -1,0 +1,85 @@
+{
+  "id": "sharing-controls",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "main": "index.mjs",
+  "name": "投递与阅读选项",
+  "description": "中文下拉和勾选式设置；只替换输入方式，不自动开启私信或改变审核。",
+  "fields": [
+    {
+      "path": [
+        "dm",
+        "autoSendTo"
+      ],
+      "label": "允许自动私信的对象",
+      "hint": "这里只选择对象；仍须开启原有私信自动发送并符合审核档位。女主人需另行启用。",
+      "kind": "multiselect",
+      "options": [
+        {
+          "value": "owner",
+          "label": "主人"
+        },
+        {
+          "value": "mistress",
+          "label": "女主人"
+        }
+      ]
+    },
+    {
+      "path": [
+        "search",
+        "order"
+      ],
+      "label": "搜索排序",
+      "kind": "select",
+      "options": [
+        {
+          "value": "totalrank",
+          "label": "综合相关度"
+        },
+        {
+          "value": "click",
+          "label": "播放量"
+        },
+        {
+          "value": "pubdate",
+          "label": "最新发布"
+        },
+        {
+          "value": "dm",
+          "label": "弹幕数"
+        },
+        {
+          "value": "stow",
+          "label": "收藏数"
+        },
+        {
+          "value": "scores",
+          "label": "综合评分"
+        }
+      ]
+    },
+    {
+      "path": [
+        "reportLevel"
+      ],
+      "label": "可选报告",
+      "hint": "日记与账本照常保留。",
+      "kind": "select",
+      "options": [
+        {
+          "value": "full",
+          "label": "完整报告"
+        },
+        {
+          "value": "brief",
+          "label": "简短摘要"
+        },
+        {
+          "value": "off",
+          "label": "不推送报告"
+        }
+      ]
+    }
+  ]
+}

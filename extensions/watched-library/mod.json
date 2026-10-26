@@ -1,0 +1,37 @@
+{
+  "id": "watched-library",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "main": "index.mjs",
+  "name": "视频足迹",
+  "description": "从本地收藏与评论记录查找视频；记录不代表完整观看。",
+  "panels": [
+    {
+      "id": "history",
+      "title": "她的视频足迹",
+      "description": "来自本地已收藏/已评论记录，不会自动联网加载封面，也不把候选推荐当成看过。",
+      "kind": "collection",
+      "route": "/videos",
+      "filters": [
+        {
+          "key": "kind",
+          "label": "记录类型",
+          "options": [
+            {
+              "value": "",
+              "label": "全部"
+            },
+            {
+              "value": "favorite",
+              "label": "已收藏"
+            },
+            {
+              "value": "comment",
+              "label": "已评论"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

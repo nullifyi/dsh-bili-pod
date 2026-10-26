@@ -1,64 +1,71 @@
-# 鲸群的 mod 扩展
+# 鲸群功能 mod
 
-鲸群（dsh-bili-pod）预留了「不碰本体也能加功能」的接口 —— 像游戏 mod：
-放一个 `.mjs` 到扩展目录，设置页点「重载扩展」，立刻生效（重启后也会自动载入）。
+打开“设置 → 鲸群 → 功能 mod”：卡片各自有启停、设置、面板和“单独重载”。配置改完点全页“保存”；入口或清单改完点对应卡片“单独重载”；新包放进目录后点“重载全部”。不需要重启 DSH。
 
-## 放哪里
+关模块会撤销其提示、控件、面板与路由，不删配置和记录。内置控件模块关闭后恢复原输入方式。未保存的配置或人设正文会阻止启停/重载；人设仍通过“注入人设”独立写入，配置保存不会冒充人设已写入。
 
-按优先级：
+## 内核与模块
 
-1. 插件自带的 `extensions/`（内置示例 `mod-example.mjs` 在这里）
-2. 环境变量 `BILI_POD_EXT`（默认 `~/.dsh/pod-ext`）
-3. 设置 → 鲸群 → 扩展 → 目录（逗号分隔，写绝对路径）
+内核统一管理身份、会话、调度、发送审批、配额、凭据和数据路径。mod 接入独立功能，不自起后台 Node 服务，也不绕过发送权限；新增通用宿主能力仍需扩展内核。
 
-目录里的文件按文件名排序。请给每个 mod 使用唯一 id。
+| 包 | 功能 |
+| --- | --- |
+| favorite-picker | 读取本人收藏夹，中文下拉；失败保留 ID，不执行收藏 |
+| watched-library | 本地已收藏/已评论的视频足迹，支持搜索筛选，不代表完整观看 |
+| sharing-controls | 自动私信对象多选、搜索和报告中文下拉，不自动开启发送 |
+| public-comment-style | 自然/简短/交流三种公开评论语气；只作用 wake/listen，不改私聊人设 |
 
-## 最小骨架
+## 加一个包，不改客户端
 
-```js
+在插件 extensions/ 或 BILI_POD_EXT（默认 DSH_HOME/pod-ext）下新建 my-note/。mod.json：
+~~~json
+{
+  "id": "my-note",
+  "name": "我的提醒",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "main": "index.mjs",
+  "fields": [{
+    "path": ["extensions", "items", "my-note", "note"],
+    "label": "提醒内容",
+    "kind": "textarea"
+  }]
+}
+~~~
+index.mjs：
+~~~js
 export default {
-  id: 'my-mod',          // 必填，小写字母开头，可含数字与 -
-  name: '我的扩展',
-  version: '0.1.0',
-  apiVersion: 1,          // 宿主 API 版本；比宿主高会被拒
-  description: '一句话说明',
-  async setup(pod) {
-    pod.log('hello')
+  setup(pod) {
+    pod.addPromptSection({
+      id: 'note',
+      title: '我的提醒',
+      reasons: ['wake'],
+      text: ({config}) => config.extensions?.items?.['my-note']?.note || '',
+    })
   },
 }
-```
+~~~
 
-`setup(pod)` 里可以（全部可选）：
+配置、逻辑、展示属于同一包。本次内置包的运行逻辑均自包含于入口；单独重载刷新入口和清单，不承诺清空 Node 对任意静态导入依赖的缓存。共享内核改动按插件版本升级验证。
 
-| 接口 | 作用 |
-| --- | --- |
-| `pod.on(event, fn)` | 订阅事件（见下表） |
-| `pod.addPromptSection({id,title,text,priority})` | 往「她醒来」的提示里插一段；`text` 可以是函数，收到 `{config,plan,scope}` |
-| `pod.command({name,desc,script})` | 给 `bili.mjs` 注册命令（`script` 是 `.mjs` 绝对路径），之后 `node bili.mjs <name>` 可跑 |
-| `pod.route('/xxx', handler)` | HTTP 路由，实际路径 `/dsh-bili/api/ext/<id><expr>`；handler 接收 `{req,res,json,bodyJson,readConfig,writeConfig,workDir,diaryRoot,podHost}`，可返回 JSON 值 |
-| `pod.field({path,label,hint,kind,options})` | 设置页字段；值读写 `config.extensions.items[<id>]`；`kind` = text/number/list/switch/select |
-| `pod.dataDir()` | 自己的数据目录 `<work>/ext/<id>`（自动创建） |
-| `pod.readConfig()` / `pod.patchConfig(patch)` | 读 / 合并写配置 |
-| `pod.log(msg)` | 写 DSH 日志，前缀 `[ext:<id>]` |
+## 控件与面板契约
 
-## 事件
+field kind 支持 text、textarea、number、list、switch、select、multiselect。options 可为字符串或 {value,label}。number 可声明 min/max/step。path 为数组，自定义配置建议放 extensions.items.<id> 下。default 是表单初值，运行逻辑也应提供相同默认值。数字、布尔、数组在服务端校验；非法值不落盘；禁用不清值。
 
-`tick` 在未忙碌的分钟调度检查中触发；`wake:before` 是定时唤醒投递前，`wake:after` 是投递被接收且计划已记账后。
-`round:start` 在 wake / dm / listen / live 调用会话前触发；`round:delivered` 只表示原生 `prompt` 返回 `accepted:true`。
-`ledger:write` 是宿主定时唤醒/复核成功提交账本；`diary:archived` 是宿主归档后；`verify:done` 是宿主复核完。
-`config:saved` 是设置 API 保存后；`login:ok` 是扫码登录成功；`extensions:loaded` 是重载结束。
+optionsRoute 是模块内只读路由，如 /folders；返回 {options:[{value:'1',label:'学习'}]}。界面自动处理读取、刷新、错误和旧选项保留。
 
-DSH 当前接收确认不提供可靠的 agent 工作完成信号，所以不提供 `round:end`。独立 CLI 发送进程没有回传事件总线，因此不承诺 `comment:sent`；CLI 写账本也不会触发宿主事件。
+panels 可声明 collection 面板：
+~~~json
+{"id":"history","title":"记录","kind":"collection","route":"/items","filters":[{"key":"kind","label":"分类","options":[{"value":"","label":"全部"}]}]}
+~~~
+pod.route('/items', handler) 返回 {items:[{id,title,url,subtitle,description,badges:[]}],total,page,pageSize}。通用界面传入 q/page 和声明的筛选参数；路由自己查询数据。文本由 React 转义，仅 HTTP(S) 链接可点击，不支持 HTML 注入。
 
-每个回调有 8 秒超时，抛错只记到扩展自己的 `lastError`，不会连累其他 mod。
+## 生命周期与兼容
 
-`setup` 可以返回（或异步返回）disposer。重载、禁用和卸载会调用一次；失败/超时回滚已注册内容，晚到的注册被忽略。prompt 的 `text` 回调必须同步返回文本，异常只记录该 mod 的错误。
+API v2 保留单文件 .mjs/API v1 和 pod.on/addPromptSection/command/route/field/dataDir/readConfig/patchConfig/log，新增 pod.panel。旧提示段默认 wake；可声明 reasons，实际渠道调用仍由宿主决定，当前接线为 wake/listen，不默认给 DM 注入。
 
-总开关、单项开关和扩展目录的设置保存会真正重载。`bili.mjs <name>` 仅按当前配置加载本地 mod 并执行注册脚本，扩展参数保持原样；内置同名命令优先。`extensions.json` 只是状态索引，不提供可注入脚本的分发入口。这些接口不是 MCP server，也不会自动注册成模型工具。
+静态清单可让禁用包不 import 入口；legacy 单 .mjs 读取导出仍须 import。副作用放在 setup 中，返回 disposer 清理资源。mod 是可信本地 Node 代码，异步超时不是进程沙箱，不能中断同步死循环或撤销已执行的外部动作。
 
-## 不能做的事
+单项重载只回收该实例；旧回调不能借同 id 的新实例恢复执行。失败 setup 回滚注册；字段/命令冲突拒绝新模块，保留健康模块；提示段 id 按模块区分。每目录先扫描 legacy 文件再扫描包，同类按文件名稳定排序；id 必须唯一。
 
-- 扩展跑在 DSH 主进程里 —— 别写死循环、别阻塞。
-- 只安装可信的本地 mod。超时只能隔离异步注册，不能中断 JS 死循环或撤销 mod 自己做的文件/网络操作；禁用项取 manifest 时仍可能 import 模块，副作用应放在 setup 并在 disposer 清理。
-- 扩展拿到的配置只是副本；要改走 `pod.patchConfig`。
-- 发评论 / 私信这类动作受本轮「权限单」约束（写扩展命令时用 `bili.mjs` 的既有命令，别自己造写接口）。
+事件为 tick、wake:before/after、round:start/delivered、ledger:write、diary:archived、verify:done、config:saved、login:ok、extensions:loaded。delivered 仅是接收确认；独立 CLI 没有可靠 comment:sent 或 round:end 总线。

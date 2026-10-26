@@ -115,7 +115,7 @@ if(process.env.TEST_NO_NODE) {
   const ext=await request('extensions',{},'GET')
   assert.equal(ext.data.ok,true)
   assert.ok(Array.isArray(ext.data.list))
-  assert.equal(ext.data.apiVersion,1)
+  assert.equal(ext.data.apiVersion,2)
 
   const tide=await request('tide/preview',{night:{mode:'tide'}})
   assert.equal(tide.data.ok,true)

@@ -1,6 +1,6 @@
 {
   "name": "dsh-bili-pod",
-  "version": "0.9.3",
+  "version": "0.10.0",
   "description": "鲸群：在 dsh-bili-whale 基座上的「可插拔」B 站生活 —— 扫码登录、峰谷生物钟、分栏日记 + 分类记录库、带哈希链的账本、评论发出后复核、mod 扩展接口。设置里有「鲸群」完整设置页。",
   "keywords": [
     "dsh",
@@ -14,7 +14,7 @@
   ],
   "type": "module",
   "scripts": {
-    "test": "node --test --test-concurrency=2 tests/bundle.test.mjs tests/companion-identity.test.mjs tests/credentials.test.mjs tests/diarystore.test.mjs tests/dm-review-continuation.test.mjs tests/features.test.mjs tests/feed-source.test.mjs tests/file-state.test.mjs tests/integration.test.mjs tests/mistress.test.mjs tests/persona.test.mjs tests/planner.test.mjs tests/policy.test.mjs tests/readonly-cli.test.mjs tests/reconcile.test.mjs tests/runtime-contract.test.mjs tests/scheduler-sync.test.mjs tests/secondary-sync.test.mjs tests/send-contract.test.mjs tests/session-delivery.test.mjs tests/settings-login.test.mjs tests/spend.test.mjs tests/trust-fence.test.mjs tests/upstream-ai-share.test.mjs tests/upstream-dm-history.test.mjs tests/upstream-dynamic-create.test.mjs tests/upstream-edit-dynamic.test.mjs tests/upstream-listener-polling.test.mjs tests/upstream-msgfeed-exact.test.mjs tests/upstream-traffic.test.mjs"
+    "test": "node --test --test-concurrency=2 tests/bundle.test.mjs tests/companion-identity.test.mjs tests/credentials.test.mjs tests/diarystore.test.mjs tests/dm-review-continuation.test.mjs tests/features.test.mjs tests/feed-source.test.mjs tests/file-state.test.mjs tests/integration.test.mjs tests/mistress.test.mjs tests/persona.test.mjs tests/planner.test.mjs tests/policy.test.mjs tests/readonly-cli.test.mjs tests/reconcile.test.mjs tests/runtime-contract.test.mjs tests/scheduler-sync.test.mjs tests/secondary-sync.test.mjs tests/send-contract.test.mjs tests/session-delivery.test.mjs tests/settings-login.test.mjs tests/spend.test.mjs tests/trust-fence.test.mjs tests/upstream-ai-share.test.mjs tests/upstream-dm-history.test.mjs tests/upstream-dynamic-create.test.mjs tests/upstream-edit-dynamic.test.mjs tests/upstream-listener-polling.test.mjs tests/upstream-msgfeed-exact.test.mjs tests/upstream-traffic.test.mjs tests/modules.test.mjs tests/module-features.test.mjs tests/mod-client.test.mjs"
   },
   "main": "lib/index.js",
   "exports": {

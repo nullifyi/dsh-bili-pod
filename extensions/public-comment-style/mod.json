@@ -1,0 +1,46 @@
+{
+  "id": "public-comment-style",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "main": "index.mjs",
+  "name": "公开评论语气",
+  "description": "调整公开评论的表达；不改主人私聊人设，也不改变发送权限。",
+  "fields": [
+    {
+      "path": [
+        "extensions",
+        "items",
+        "public-comment-style",
+        "mode"
+      ],
+      "label": "公开评论风格",
+      "kind": "select",
+      "default": "natural",
+      "options": [
+        {
+          "value": "natural",
+          "label": "自然接话"
+        },
+        {
+          "value": "brief",
+          "label": "简短直说"
+        },
+        {
+          "value": "question",
+          "label": "交流提问"
+        }
+      ]
+    },
+    {
+      "path": [
+        "extensions",
+        "items",
+        "public-comment-style",
+        "note"
+      ],
+      "label": "补充偏好",
+      "hint": "只影响公开评论；留空沿用原风格。最多取600字。",
+      "kind": "textarea"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "id": "favorite-picker",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "main": "index.mjs",
+  "name": "收藏夹选择",
+  "description": "从当前登录账号读取收藏夹；不再手填 ID，不执行收藏。",
+  "fields": [
+    {
+      "path": [
+        "favFolderId"
+      ],
+      "label": "目标收藏夹",
+      "hint": "读取失败会保留当前 ID；关闭此模块恢复手填 ID。",
+      "kind": "select",
+      "options": [
+        {
+          "value": "",
+          "label": "默认收藏夹"
+        }
+      ],
+      "optionsRoute": "/folders"
+    }
+  ]
+}
