@@ -1,3 +1,4 @@
+process.env.BILI_TRAFFIC_TEST='1' // Fake-network fixtures only.
 import fs from 'node:fs'
 globalThis.fetch=async(url,opts={})=>{
   const u=String(url);fs.appendFileSync(process.env.TEST_REQUESTS,JSON.stringify({url:u,method:opts.method??'GET',body:opts.body??''})+'\n')

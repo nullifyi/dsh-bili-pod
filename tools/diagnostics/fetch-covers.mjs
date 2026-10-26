@@ -1,5 +1,7 @@
+import { guardedFetch as fetch } from '../lib/traffic.mjs'
 // 抓视频元信息；仅 artifacts.enabled 时写封面，不启用则只打印封面URL。
 //   node fetch-covers.mjs BV1xxx BV2yyy ... [--out 目录]
+
 import fs from 'node:fs'
 import path from 'node:path'
 import {config} from '../lib/config.mjs'

@@ -36,7 +36,8 @@
     "enabled": true,
     "minScore": 13,
     "silentAfterDays": 3,
-    "decayPerDay": 1
+    "decayPerDay": 1,
+    "aiCommentGuard": false
   },
   "listen": {
     "comment": true,
@@ -46,7 +47,8 @@
     "allDay": true,
     "live": false,
     "liveRoom": "",
-    "liveScope": "owner"
+    "liveScope": "owner",
+    "dmIntervalSec": 60
   },
   "night": {
     "windows": [
@@ -69,5 +71,16 @@
     "args": [
       "C:\\Users\\<本机用户名>\\.dsh\\profiles\\desktop\\node_modules\\dsh-wechat-plugin\\cli.js"
     ]
+  },
+  "sessionRotateDays": 0,
+  "personaOncePerSession": false,
+  "risk": {
+    "minGapMs": 1500,
+    "readHourly": 600,
+    "readDaily": 3000,
+    "writeHourly": 12,
+    "writeDaily": 30,
+    "writeGapSec": 120,
+    "dmGapSec": 0
   }
 }

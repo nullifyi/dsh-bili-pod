@@ -53,7 +53,7 @@ if (!ok) {
   console.error('\n没登上（超时或过期）。再跑一次 `bili.mjs login` 就行。')
   process.exit(4)
 }
-saveCredential(ok)
+await saveCredential(ok)
 const self = await fetchSelf(ok)
 if (self) {
   console.log(`\n✅ 登录成功：${self.name}（mid ${self.mid}）`)

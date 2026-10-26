@@ -1,3 +1,4 @@
+import { guardedFetch as fetch } from '../lib/traffic.mjs'
 // 复核一条**楼中楼回复**：自动翻页找 rpid，报出「带 cookie 的 state」和「匿名是否可见」。
 // 用途：楼中楼会分页（20 条/页），只查第 1 页会误判成"被吞"。
 //

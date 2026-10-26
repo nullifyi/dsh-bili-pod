@@ -1,3 +1,4 @@
+process.env.BILI_TRAFFIC_TEST='1' // Fake-network fixtures only.
 import fs from 'node:fs'
 import path from 'node:path'
 import cp from 'node:child_process'

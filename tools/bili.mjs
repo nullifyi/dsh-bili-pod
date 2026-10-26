@@ -16,6 +16,11 @@ import { checkCommand, readScope } from '../lib/scope.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const map = {
+  recommend: ['commands/recommend.mjs', '当前账号首页推荐（只读）：[--n 1–30]'],
+  frames: ['commands/vision.mjs', '轻量故事板看图：<BV> --transient [--n 3] [--at 秒,秒]；返回图片路径后须read_image', 'frames'],
+  cover: ['commands/vision.mjs', '临时封面预览：<BV> --transient；返回图片路径后须read_image', 'cover'],
+  'comment-history': ['commands/comment-history.mjs', '最近成功评论账本（只读）：[--days 7] [--limit 8]'],
+  traffic: ['commands/traffic.mjs', '请求保护状态 / 人工核查后恢复'],
   // —— 读（不需要写操作，安全） ——
   session: ['verify/session.mjs', '确认凭据属于哪个号'],
   thread: ['verify/thread.mjs', '导出一条评论的完整楼中楼结构'],
@@ -30,7 +35,9 @@ const map = {
   subtitles: ['commands/subtitles.mjs', '官方字幕全文：<BV> [--lan ai-zh] [--out 目录] [--print N]；artifacts开启才写文件，关闭则stdout全文'],
   'watch-video': ['commands/bili-watch.mjs', '真"看"视频：取直链 → 下载 → ffmpeg 抽帧拼九宫格 → 交给 read_image：<BV> [3x3|4x4] [--uniform]'],
   debrief: ['commands/debrief.mjs', '看懂一条视频（一条龙）：封面+简介+官方字幕+弹幕热区(对齐字幕)+热评+画面抽帧：<BV> [--bucket 30] [--top 5] [--grid 3x3] [--no-frames]'],
-  comments: ['commands/comments.mjs', '热评 / 最新评论（只读，匿名可读）：<BV> [--ps 20] [--pn 1] [--sort hot|time] [--json]'],
+  'ai-share': ['commands/ai-share.mjs', '分享前评论抽样与模型评估：sample <BV> [--more] / record <BV> <结果.json>'],
+  comments: ['commands/comments.mjs', '热评 / 最新评论（只读，匿名可读）：<BV> [--ps 20] [--pn 1] [--sort hot|time] [--json] —— 日报挑片只要"标题+热评"时用它，比 debrief 轻'],
+
   feed: ['commands/feed.mjs', '选题器（只读）：照日记里的「爱看」捞候选，排除看过的/已评论过的：<BV> [--n 6] [--per 2]'],
   quota: ['commands/quota.mjs', '限额闸（代码强制部分）：status / check --auto|--share / record / set --daily N / react / ask / allow'],
   likes: ['commands/likes.mjs', '谁赞了她（「收到的赞」通知流，含点赞者 mid/昵称）：--hours 24 [--owner] [--json]'],

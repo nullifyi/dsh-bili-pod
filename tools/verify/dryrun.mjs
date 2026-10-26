@@ -1,3 +1,4 @@
+import { guardedFetch as fetch } from '../lib/traffic.mjs'
 // Dry-run preparation for one comment. Read-only, no credentials.
 //  1. BV -> aid via the public view API (oid for the comment area)
 //  2. video facts + comment-area state + top comments (to read the room)

@@ -1,0 +1,3 @@
+import {readSent} from '../../lib/verifycomments.mjs'
+const a=process.argv.slice(2),value=(k,d)=>a.includes(k)?Number(a[a.indexOf(k)+1]):d
+try{const days=value('--days',7),limit=value('--limit',8);if(!Number.isInteger(days)||days<1||days>30||!Number.isInteger(limit)||limit<1||limit>50)throw Error('days须为1–30、limit须为1–50的整数');const cutoff=Date.now()-days*86400000;const items=readSent().items.filter(x=>Date.parse(x.at)>=cutoff).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)).slice(0,limit).map(x=>({at:x.at,bvid:x.bvid,oid:x.oid,type:x.type,rpid:x.rpid,message:x.message??'',observation:x.verified}));console.log(JSON.stringify({ok:true,source:'local-accepted-receipts',items},null,2))}catch(e){console.error(e.message);process.exitCode=3}

@@ -1,3 +1,5 @@
+> 2026-10-26：此表为历史快照；当前新增能力与架构差异见[0.9.0同步映射](UPSTREAM-SYNC-20261026.md)。
+
 # 能力与设置差集（2026-10-22，0.5.1）
 
 参照项目为 [dsh-bili-whale](https://github.com/Alterssss/dsh-bili-whale) 与 [dsh-bili-scroll](https://github.com/c1overzz/dsh-bili-scroll)。whale 是代码派生来源；GitHub `fork=false` 的事实及固定比较提交见[验收记录](ACCEPTANCE-20261022.md)。本清单以本轮读取的原源码为准，不声称已合入最新上游。

@@ -1,9 +1,11 @@
+process.env.BILI_TRAFFIC_TEST='1' // Fake-network fixtures only.
 import fs from 'node:fs'
 globalThis.fetch = async (url, opts = {}) => {
   const u = String(url)
   fs.appendFileSync(process.env.TEST_REQUESTS, JSON.stringify({ url: u, method: opts.method ?? 'GET', body: opts.body ?? '', cookie: opts.headers?.cookie ?? '' }) + '\n')
   let data
   if (u.includes('/nav')) data = { code: 0, data: { isLogin: true, mid: 111, uname: 'offline-account' } }
+  else if (u.includes('/reply/main')) data = { code: 0, data: {} } // New read-only target preflight.
   else if (u.includes('/reply/add')) {
     if (process.env.TEST_POST === 'uncertain') throw new Error('offline connection dropped after write')
     if (process.env.TEST_VERIFY === 'accounting') fs.mkdirSync(process.env.USERPROFILE + '/.bili-ai/quota.json')

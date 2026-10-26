@@ -124,3 +124,11 @@ test('disabled standalone outputs preserve existing artifacts without touching t
   const sub=path.join(out,'BV1234567890-zh-CN.txt');fs.writeFileSync(sub,'existing subtitles')
   assert.equal(run(env,['subtitles','BV1234567890','--out',out]).status,0);assert.equal(fs.readFileSync(sub,'utf8'),'existing subtitles')
 })
+
+test('deps reports effective cheap windows and resets yesterday wake count without rewriting config',t=>{
+ const env=sandbox(t);const raw={night:{mode:'cheap',windows:[],cheap:{wakes:3,windows:[{start:'00:30',end:'08:30'}]}}};
+ fs.writeFileSync(env.BILI_POD_CONFIG,JSON.stringify(raw));const before=fs.readFileSync(env.BILI_POD_CONFIG,'utf8');
+ fs.writeFileSync(path.join(env.DSH_HOME,'pod-night.json'),JSON.stringify({schema:2,date:'2000-01-01',action:'done',wakes:9,reason:'done'}));
+ const r=run(env,['deps','--json']);const result=JSON.parse(r.stdout);const clock=result.items.find(x=>x.name==='生物钟');
+ assert.equal(clock.ok,false);assert.match(clock.detail,/已过期/);assert.match(clock.detail,/0\/3/);assert.equal(fs.readFileSync(env.BILI_POD_CONFIG,'utf8'),before);
+});

@@ -54,6 +54,6 @@ test('fav uses configured or explicit owned folder for both dry/go and keeps dup
   assert.notEqual(run(env,'tools/bili.mjs',['fav','BV1234567890','--reason','学习这条详细教程','--go']).status,0)
   const other=sandbox(t,{favFolderId:'999'});assert.notEqual(run(other,'tools/bili.mjs',['fav','BV1234567890','--reason','学习这条详细教程','--go']).status,0);assert.equal(requests(other).filter(x=>x.method==='POST').length,0)
 })
-for(const scenario of ['states','cancel','regenerate','generate-order','manual','expired','unload','settings','prompts','notifications','client','store-migration','store-import','client-late-cancel','client-generating-cancel','client-late-generate']) test('real lifecycle behavior: '+scenario,t=>{
+for(const scenario of ['states','concurrent-poll','cancel','regenerate','generate-order','manual','expired','unload','settings','prompts','notifications','client','store-migration','store-import','client-late-cancel','client-generating-cancel','client-late-generate']) test('real lifecycle behavior: '+scenario,t=>{
   const env=sandbox(t);const r=run(env,'tests/helpers/settings-lifecycle.mjs',[scenario]);assert.equal(r.status,0,r.stderr+r.stdout)
 })

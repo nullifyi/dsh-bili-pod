@@ -1,3 +1,4 @@
+process.env.BILI_TRAFFIC_TEST='1' // Fake-network fixtures only.
 import fs from 'node:fs'
 import path from 'node:path'
 import assert from 'node:assert/strict'
@@ -27,7 +28,7 @@ if(scenario==='client') {
   assert.equal(timers.filter(t=>!t.cleared).length,0);assert.ok(requests.some(x=>x.includes('/cancel')))
   process.exit(0)
 }
-let generation=0, blockedGen,blockedPoll, pollCode=86101
+let generation=0, blockedGen,blockedPoll, pollCode=86101, pollRequests=0
 globalThis.fetch=async url=>{
   const u=String(url)
   if(u.includes('/qrcode/generate')) {
@@ -35,6 +36,7 @@ globalThis.fetch=async url=>{
     return {ok:true,json:async()=>({data:{qrcode_key:'key'+id,url:'https://fake-login/'+id}})}
   }
   if(u.includes('/qrcode/poll')) {
+    pollRequests++
     const code=pollCode;if(blockedPoll){const p=blockedPoll;blockedPoll=null;await p.promise}
     return {headers:{getSetCookie:()=>['SESSDATA=qr-session-test-only','bili_jct='+'b'.repeat(32),'buvid3=fake']},json:async()=>({data:{code}})}
   }
@@ -127,6 +129,8 @@ if(scenario==='store-migration'||scenario==='store-import') {
   assert.equal((await req('login/poll?key='+key)).data.state,'waiting');pollCode=86090;assert.equal((await req('login/poll?key='+key)).data.state,'scanned')
   pollCode=0;const ok=await req('login/poll?key='+key);assert.equal(ok.data.state,'ok');assert.equal(loadCred().sessdata,'qr-session-test-only');assert.doesNotMatch(JSON.stringify(ok),/qr-session-test-only|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/)
   assert.equal((await req('login/poll?key=unissued')).data.state,'expired')
+} else if(scenario==='concurrent-poll') {
+  const qr=await req('login/qr');pollCode=0;const hold=blockedPoll=deferred();const a=req('login/poll?key='+qr.data.key);await flush();const b=req('login/poll?key='+qr.data.key);await flush();hold.resolve();const [one,two]=await Promise.all([a,b]);assert.equal(one.data.state,'ok');assert.deepEqual(one.data,two.data);assert.equal(pollRequests,1)
 } else if(scenario==='generate-order') {
   const hold=blockedGen=deferred(),old=req('login/qr');await flush();const current=await req('login/qr');hold.resolve();const stale=await old
   assert.equal(stale.data.ok,false);assert.equal((await req('login/poll?key='+stale.data.key)).data.state,'expired');assert.equal((await req('login/poll?key='+current.data.key)).data.state,'waiting')
@@ -136,7 +140,7 @@ if(scenario==='store-migration'||scenario==='store-import') {
   if(scenario==='cancel')assert.equal((await req('login/cancel',{requestId:qr.data.requestId},'POST')).data.ok,true)
   else if(scenario==='regenerate')await req('login/qr')
   else if(scenario==='manual')await req('cookie',{sessdata:'manual-saved-credential-only',bili_jct:'c'.repeat(32)},'POST')
-  else if(scenario==='expired'){pollCode=86038;assert.equal((await req('login/poll?key='+qr.data.key)).data.state,'expired')}
+  else if(scenario==='expired'){const realNow=Date.now;Date.now=()=>realNow()+180001;assert.equal((await req('login/poll?key='+qr.data.key)).data.state,'expired')}
   else if(scenario==='unload')cleanup()
   hold.resolve();assert.equal((await old).data.state,'expired');assert.equal(loadCred().sessdata,scenario==='manual'?'manual-saved-credential-only':original)
 }

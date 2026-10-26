@@ -1,3 +1,5 @@
+import { guardedFetch as fetch } from '../lib/traffic.mjs'
+import { dshPath } from '../lib/paths.mjs'
 // 通知分发器 —— 她看完一轮，把摘要送到哪。
 //
 // 2026-10-18 主人重定：方式只有四种（不推送 / 桌面通知 / Webhook / 自定义命令）。
@@ -170,7 +172,8 @@ try {
     try {
       // 2026-10-22：设置页「发条测试」走的是宿主固定文案 → 带 --test 免掉「发前审核」
       //   （以前测试消息会被审核闸 exit 7 拦住，主人看到的就是「测试没成功」✗）
-      r = spawnSync(NODE_EXE, [dmPath, '--msg', String(text), ...(TEST ? ['--test'] : []), '--go'], { stdio: ['ignore', fdO, fdE], timeout: 90000 })
+      r = spawnSync(NODE_EXE, [dmPath, '--msg', String(text), ...(TEST ? ['--test'] : []), '--go'], { stdio: ['ignore', fdO, fdE], timeout: 300000 })
+
     } finally {
       try { fs.closeSync(fdO) } catch {}
       try { fs.closeSync(fdE) } catch {}
@@ -181,7 +184,10 @@ try {
   } else if (type === 'stdout') {
     console.log(`[通知] ${title}\n${text}`)
   } else if (type === 'file') {
-    const p = n.path ?? path.join(process.env.USERPROFILE || os.homedir(), '.dsh', 'pod-notify.log')
+    // 2026-10-23 修（issue #27）：日志也要跟 DSH_HOME 走 ✓
+    const p = String(n.path ?? '').trim() || dshPath('pod-notify.log')
+    if (DRY) { console.log(`[dry] 通知文件：${p}（不写入）`); process.exit(0) }
+
     fs.mkdirSync(path.dirname(p), { recursive: true })
     fs.appendFileSync(p, JSON.stringify(payload) + '\n')
     console.log(`已写入通知文件：${p}`)

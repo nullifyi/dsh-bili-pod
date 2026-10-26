@@ -1,3 +1,4 @@
+import { guardedFetch as fetch } from '../lib/traffic.mjs'
 // 私信（专属通道）—— 2026-10-18 主人定：**三条写死在代码里**
 //   ① **一天只锁定 1 个收信人**（防刷量；对同一个人发多少条不限 ✓）
 //   ② 只发给配置里的 owner.mid（同一个用户，别处发不出去）
@@ -21,7 +22,7 @@ import { buildDmMessage } from '../../lib/dm-message.mjs'
 import { reviewDecision, reserveAuto, settleAuto, dmGapBlocks, dmSameThread } from '../../lib/policy.mjs'
 import { STATE_DIR } from '../lib/paths.mjs'
 import { addDraft, coordinates, checkApproval, beginSend, finishSend, claimShareContinuation, finishShareContinuation } from '../../lib/comment-state.mjs'
-import { stateFile } from '../lib/paths.mjs'
+import { dshPath, stateFile } from '../lib/paths.mjs'
 import { proactiveCap } from '../../lib/dm-limits.mjs'
 import { workDir } from '../lib/paths.mjs'
 import { readScope } from '../../lib/scope.mjs'
@@ -228,6 +229,8 @@ async function send(toMid, text) {
   const r = await fetch('https://api.vc.bilibili.com/web_im/v1/web_im/send_msg', {
     signal: AbortSignal.timeout(15000),
     method: 'POST',
+    waitWriteMs: 180000,
+    interactiveReply: !SHARE,
     headers: { ...H, 'content-type': 'application/x-www-form-urlencoded' },
     body: body.toString(),
   })
@@ -257,7 +260,13 @@ if (!OWNER) { console.error('✗ 配置里 owner.mid 为空 —— 私信只发�
 if (MSG.length > 300) { console.error(`✗ 私信太长（${MSG.length} > 300 字），退化成刷屏了 ✗`); process.exit(2) }
 
 const meInfo = await me()
-if (String(meInfo.mid) === ONLY_TO) { console.error('✗ 不能给自己发私信'); process.exit(2) }
+if (String(meInfo.mid) === ONLY_TO) {
+  // 2026-10-23 修（issue #22）：只报「不能给自己发私信」没有出路 ✗
+  console.error('✗ 不能给自己发私信（owner.mid 就是 cookie 这个号）');
+  console.error('  私信通道需要【第二个 B 站号】：设 owner.mid 为另一个号，且双方手动互关');
+  console.error('  只有一个号时：分享方式选「评论区 @」，推送选桌面通知 / Webhook / 自定义命令 ✓');
+  process.exit(2)
+}
 
 const rel = await relation(ONLY_TO)
 if (!rel.ok) { console.error(`✗ ${rel.why}`); process.exit(3) }
@@ -389,7 +398,7 @@ if (r.http >= 200 && r.http < 300 && r.code === 0) {
         at: new Date().toISOString(),
       })
       try {
-        fs.appendFileSync(path.join(HOME, '.dsh', 'pod-log.jsonl'), JSON.stringify({
+        fs.appendFileSync(dshPath('pod-log.jsonl'), JSON.stringify({
           at: new Date().toISOString(), kind: 'mistress-share',
           target: targetBV ? `BV:${targetBV}` : `mid:${ONLY_TO}`,
           note: FINAL.slice(0, 60),

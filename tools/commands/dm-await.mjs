@@ -1,134 +1,82 @@
-// 私信监听（主人 + 女主人）—— 命中任一收件人的新消息就叫她起来
-//   主人：普通回答（该审就审）
-//   女主人：必须回（`--reply`），一天最多 mistress.replyMaxPerDay 条，长回可分两条
-//   用法:
-//     node dm-await.mjs --baseline          把当前状态记为"已读"，从现在起只认新消息
-//     node dm-await.mjs --once [--json]     轮询一次（命中打印 DM_HIT）
-//     node dm-await.mjs --once --json --peek  持久化待交付消息，返回 receipt
-//     node dm-await.mjs --ack <receipt>    宿主成功接收后确认，不访问网络
+// Exit codes: 0=message/ack/baseline; 1=normal empty; 2=invalid input; 3=failure.
+// A single OS-owned lock and persisted queue cover both configured recipients.
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { config } from '../lib/config.mjs'
-import { stateFile } from '../lib/paths.mjs'
-
-const argv = process.argv.slice(2)
-const opt = {}
-for (let i = 0; i < argv.length; i += 1) {
-  if (argv[i].startsWith('--')) {
-    const v = argv[i + 1]
-    if (v === undefined || v.startsWith('--')) opt[argv[i].slice(2)] = true
-    else { opt[argv[i].slice(2)] = v; i += 1 }
+import { stateFile, credentialsPath } from '../lib/paths.mjs'
+import { readHistory } from '../lib/dm-history.mjs'
+import { acquireProcessLock } from '../lib/process-lock.mjs'
+const argv=process.argv.slice(2),peek=argv.includes('--peek'),json=argv.includes('--json')
+const cfg=config(),owner=String(cfg.owner?.mid??'').trim()
+const talkers=[{mid:owner,role:'owner',name:String(cfg.owner?.name??'主人')},...(cfg.mistress?.enabled&&cfg.mistress.mid&&String(cfg.mistress.mid)!==owner?[{mid:String(cfg.mistress.mid),role:'mistress',name:String(cfg.mistress.title??'女主人')}]:[])]
+const file=stateFile('dm-await-state.json')
+function save(s) {
+ const tmp=file+'.'+crypto.randomUUID()+'.tmp'
+ try{fs.writeFileSync(tmp,JSON.stringify(s,null,2)+'\n');fs.renameSync(tmp,file)}finally{fs.rmSync(tmp,{force:true})}
+}
+function normalize(raw) {
+ if(!raw||typeof raw!=='object'||Array.isArray(raw))throw Error('私信状态损坏')
+ const s={...raw,owner,seen:{...raw.seen},keys:{...raw.keys},lastKeysByTalker:{...raw.lastKeysByTalker},lastIncomingByTalker:{...raw.lastIncomingByTalker},queue:raw.queue??[]}
+ if(!Array.isArray(s.queue))throw Error('私信待交付队列损坏')
+ if(raw.owner&&raw.lastSeen!==undefined) {
+  s.seen[raw.owner]=Math.max(Number(s.seen[raw.owner]??0),Number(raw.lastSeen))
+  s.lastKeysByTalker[raw.owner]=raw.lastKeys??(raw.lastKey?[raw.lastKey]:[])
+  if(raw.lastIncoming)s.lastIncomingByTalker[raw.owner]=Math.max(Number(s.lastIncomingByTalker[raw.owner]??0),Number(raw.lastIncoming))
+ }
+ if(raw.owner&&raw.lastKey)s.keys[raw.owner]=String(raw.lastKey)
+ for(const ts of Object.values(s.seen))if(!Number.isFinite(Number(ts))||Number(ts)<0)throw Error('私信游标损坏，已停止读取')
+ const allowed=new Set(talkers.map(t=>t.mid))
+ s.queue=s.queue.filter(r=>allowed.has(String(r.mid??owner)))
+ if(s.pending&&!allowed.has(String(s.pending.mid)))throw Error('待确认私信的收件人已变化，请先人工核对回执')
+ return s
+}
+function ack(s,msg) {
+ const mid=String(msg.mid),same=Number(s.seen[mid])===Number(msg.ts)
+ const previous=s.lastKeysByTalker[mid]??(s.keys[mid]?[s.keys[mid]]:[])
+ s.seen[mid]=Number(msg.ts);s.keys[mid]=String(msg.key)
+ s.lastKeysByTalker[mid]=[...new Set([...(same?previous:[]),String(msg.key)])]
+ s.pending=null;s.at=new Date().toISOString()
+ if(mid===owner){s.lastSeen=s.seen[mid];s.lastKey=s.keys[mid];s.lastKeys=s.lastKeysByTalker[mid]}
+ return s
+}
+function emit(m){console.log(json?JSON.stringify(m):'DM_HIT role='+m.role+' mid='+m.mid+' text='+m.text)}
+async function main() {
+ if(!owner){console.error('配置里 owner.mid 为空');return 2}
+ let raw={};try{raw=JSON.parse(fs.readFileSync(file,'utf8'))}catch(e){if(e.code!=='ENOENT')throw Error('私信状态无法读取，已停止推进已读位置：'+e.message)}
+ const s=normalize(raw),at=argv.indexOf('--ack')
+ if(at>=0){if(!s.pending||s.pending.receipt!==argv[at+1]){console.error('私信确认凭据不匹配，未推进已读状态');return 2}save(ack(s,s.pending));console.log('私信交付已确认');return 0}
+ if(s.pending&&!argv.includes('--baseline')){emit(s.pending);return 0}
+ if(!s.queue.length||argv.includes('--baseline')) {
+  const cred=JSON.parse(fs.readFileSync(credentialsPath,'utf8'))
+  const headers={'user-agent':'Mozilla/5.0',referer:'https://www.bilibili.com/',cookie:'SESSDATA='+cred.sessdata+'; bili_jct='+cred.bili_jct+'; buvid3='+cred.buvid3}
+  const collected=[]
+  for(const t of talkers) {
+   const cursor={lastSeen:s.seen[t.mid],lastKey:s.keys[t.mid],lastKeys:s.lastKeysByTalker[t.mid]}
+   const result=await readHistory(t.mid,headers,cursor,{baseline:argv.includes('--baseline')})
+   if(argv.includes('--baseline')) {
+    const latest=result.all.at(-1),ts=latest?.ts??0
+    s.seen[t.mid]=ts;s.keys[t.mid]=latest?.key;s.lastKeysByTalker[t.mid]=result.all.filter(r=>r.ts===ts).map(r=>r.key)
+   } else {
+    collected.push(...result.messages.map(r=>({...r,...t})))
+    const times=result.messages.filter(r=>[1,7,8].includes(r.type)&&r.ts<=Math.floor(Date.now()/1000)).map(r=>r.ts)
+    if(times.length)s.lastIncomingByTalker[t.mid]=Math.max(Number(s.lastIncomingByTalker[t.mid]??0),...times)
+   }
   }
+  s.lastIncoming=s.lastIncomingByTalker[owner]
+  if(argv.includes('--baseline')){s.lastSeen=s.seen[owner];s.lastKey=s.keys[owner];s.lastKeys=s.lastKeysByTalker[owner];s.pending=null;s.queue=[];save(s);console.log('已把当前私信状态标记为已读');return 0}
+  s.queue=collected.sort((a,b)=>a.ts-b.ts||a.mid.localeCompare(b.mid)||(a.seq&&b.seq?(BigInt(a.seq)<BigInt(b.seq)?-1:BigInt(a.seq)>BigInt(b.seq)?1:0):a.key.localeCompare(b.key)))
+  save(s)
+ }
+ if(!s.queue.length){console.log(json?JSON.stringify({hit:false}):'无新私信');return 1}
+ const [row,...rest]=s.queue
+ const t=talkers.find(t=>t.mid===String(row.mid??owner))
+ const msg={hit:true,...t,text:row.text,ts:row.ts,key:row.key,receipt:crypto.randomUUID()}
+ s.queue=rest
+ if(peek){s.pending=msg;save(s)}else save(ack(s,msg))
+ emit(msg);return 0
 }
-const BASE = !!opt.baseline
-const ONCE = !!opt.once || BASE
-const JSONOUT = !!opt.json
-const PEEK = !!opt.peek
-
-const U = process.env.USERPROFILE || process.env.HOME || '/'
-const STATE = stateFile('dm-await-state.json')
-const c = JSON.parse(fs.readFileSync(path.join(U, '.bili-ai', 'credentials.json'), 'utf8'))
-const cfg = config()
-const OWNER = String(cfg.owner?.mid ?? '').trim()
-const OWNER_NAME = String(cfg.owner?.name ?? '主人')
-const MISTRESS = cfg.mistress?.enabled === true ? String(cfg.mistress?.mid ?? '').trim() : ''
-const MISTRESS_NAME = String(cfg.mistress?.title ?? '女主人')
-if (!OWNER) { console.error('✗ 配置里 owner.mid 为空'); process.exit(2) }
-
-/** 收件人表：主人 + （启用时）女主人。命中谁都算，role 决定回复口径。 */
-const TALKERS = [
-  { mid: OWNER, role: 'owner', name: OWNER_NAME },
-  ...(MISTRESS && MISTRESS !== OWNER ? [{ mid: MISTRESS, role: 'mistress', name: MISTRESS_NAME }] : []),
-]
-
-const H = {
-  'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-  referer: 'https://www.bilibili.com/',
-  cookie: `SESSDATA=${c.sessdata}; bili_jct=${c.bili_jct}; buvid3=${c.buvid3}`,
-}
-const loadState = () => {
-  try { return JSON.parse(fs.readFileSync(STATE, 'utf8')) }
-  catch (error) { if (error.code === 'ENOENT') return {}; throw new Error('私信状态无法读取，已停止推进已读位置：' + error.message) }
-}
-const saveState = (o) => {
-  fs.mkdirSync(path.dirname(STATE), { recursive: true })
-  const temp = STATE + '.' + process.pid + '.tmp'
-  try { fs.writeFileSync(temp, JSON.stringify(o, null, 2) + '\n'); fs.renameSync(temp, STATE) }
-  finally { fs.rmSync(temp, { force: true }) }
-}
-const parsed = (content) => {
-  try { const j = JSON.parse(String(content)); return String(j.content ?? j.text ?? content) } catch { return String(content ?? '') }
-}
-
-async function poll() {
-  const u = 'https://api.vc.bilibili.com/session_svr/v1/session_svr/get_sessions?session_type=1&group_id=0&count=20&mobi_app=web'
-  const r = await fetch(u, { headers: H })
-  const j = await r.json().catch(() => ({}))
-  if (j.code !== 0) return { ok: false, why: `get_sessions code=${j.code} ${j.message ?? ''}` }
-  const list = j.data?.session_list ?? []
-  for (const t of TALKERS) {
-    const mine = list.find((s) => String(s.talker_id) === t.mid)
-    if (!mine) continue
-    const last = mine.last_msg ?? {}
-    const ts = Number(last.timestamp ?? 0)
-    const text = parsed(last.content)
-    const sender = String(last.sender_uid ?? 0)
-    const fromSelf = sender === t.mid               // 只有对方发来的才算
-    const key = String(last.msg_key ?? last.msg_seqno ?? crypto.createHash('sha256').update(JSON.stringify([ts, sender, text])).digest('hex'))
-    return { ok: true, ts, key, text, role: t.role, mid: t.mid, name: t.name, fromSelf, unread: Number(mine.unread_count ?? 0) }
-  }
-  return { ok: true, hit: false, why: '没有主人/女主人的会话' }
-}
-
-/** 兼容旧状态：{owner,lastSeen,lastKey} → {seen:{<mid>:ts}, keys:{<mid>:key}} */
-function normalizeState(st) {
-  const seen = { ...(st.seen ?? {}) }
-  const keys = { ...(st.keys ?? {}) }
-  if (st.owner && st.lastSeen) { seen[String(st.owner)] = Math.max(Number(seen[st.owner] ?? 0), Number(st.lastSeen)) }
-  if (st.owner && st.lastKey) keys[String(st.owner)] = String(st.lastKey)
-  return { seen, keys, pending: st.pending ?? null, at: st.at ?? '' }
-}
-
-if (BASE) {
-  const r = await poll()
-  if (!r.ok) { console.error(`✗ ${r.why}`); process.exit(3) }
-  const st = normalizeState(loadState())
-  if (!r.hit && r.mid) { st.seen[r.mid] = r.ts || 0; st.keys[r.mid] = r.key }
-  saveState({ ...st, at: new Date().toISOString() })
-  console.log(`已把当前私信状态标记为已读（${r.mid ?? '无会话'} @ ${r.ts ?? 0}）✓ 从现在起只认新消息`)
-  process.exit(0)
-}
-
-let st = normalizeState(loadState())
-if (opt.ack) {
-  if (!st.pending || st.pending.receipt !== String(opt.ack)) {
-    console.error('私信确认凭据不匹配，未推进已读状态'); process.exit(2)
-  }
-  st.seen[String(st.pending.mid)] = Number(st.pending.ts)
-  st.keys[String(st.pending.mid)] = String(st.pending.key)
-  saveState({ ...st, pending: null, at: new Date().toISOString() })
-  console.log('私信交付已确认'); process.exit(0)
-}
-if (st.pending) {
-  console.log(JSONOUT ? JSON.stringify(st.pending) : `DM_HIT role=${st.pending.role} mid=${st.pending.mid} ts=${st.pending.ts} text=${st.pending.text}`)
-  process.exit(0)
-}
-const r = await poll()
-if (!r.ok) { console.error(`✗ ${r.why}`); process.exit(3) }
-if (r.hit) { if (JSONOUT) console.log(JSON.stringify({ hit: false })); else if (!ONCE) console.log('无新私信'); process.exit(1) }
-const lastSeen = Number(st.seen[r.mid] ?? 0)
-const hit = r.fromSelf && (r.ts > lastSeen || (r.ts === lastSeen && st.keys[r.mid] && r.key !== st.keys[r.mid]))
-if (hit) {
-  const result = { hit: true, role: r.role, mid: r.mid, name: r.name, text: r.text, ts: r.ts, key: r.key }
-  if (PEEK) { result.receipt = crypto.randomUUID(); saveState({ ...st, pending: result }) }
-  else { st.seen[r.mid] = r.ts; st.keys[r.mid] = r.key; saveState({ ...st, at: new Date().toISOString() }) }
-  if (JSONOUT) console.log(JSON.stringify(result))
-  else console.log(`DM_HIT role=${r.role} mid=${r.mid} name=${r.name} ts=${r.ts} text=${r.text.replace(/\n/g, ' ').slice(0, 200)}`)
-  process.exit(0)
-}
-// 没命中：把该会话的 lastSeen 往前推
-if (r.ts > lastSeen) { st.seen[r.mid] = r.ts; st.keys[r.mid] = r.key; saveState({ ...st, at: new Date().toISOString() }) }
-if (JSONOUT) console.log(JSON.stringify({ hit: false }))
-else if (!ONCE) console.log('无新私信')
-process.exit(1)
+let release
+try{fs.mkdirSync(path.dirname(file),{recursive:true});release=await acquireProcessLock(file);process.exitCode=await main()}
+catch(e){console.error(e.message);process.exitCode=3}
+finally{if(release)await release()}

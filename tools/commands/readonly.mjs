@@ -1,3 +1,4 @@
+import { guardedFetch as fetch } from '../lib/traffic.mjs'
 // Readonly aggregates over pinned upstream GET definitions; see docs/readonly-cli.md.
 import fs from 'node:fs'
 import {CRED_PATH, loadCred} from '../lib/cred.mjs'

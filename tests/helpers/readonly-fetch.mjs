@@ -1,3 +1,4 @@
+process.env.BILI_TRAFFIC_TEST='1' // Fake-network fixtures only.
 // Offline boundary for real CLI subprocesses: exact hosts/routes only, no network fallback.
 import fs from 'node:fs'
 import path from 'node:path'
