@@ -36,5 +36,5 @@
 ### Task 4: Delivery
 - [x] Run relevant tests then full package test script; inspect diff (311 passed).
 - [x] Update version, README and extensions contract with a complete minimal mod package.
-- [ ] Merge verified commit into clean installed checkout; reload only this plugin without restarting DSH.
-- [ ] Verify actual module status and settings page; preserve config/persona SHA and session model/permissions.
+- [x] Merge verified commit into clean installed checkout; reload only this plugin without restarting DSH.
+- [x] Verify actual module status and settings page; preserve config/persona SHA and session model/permissions.
